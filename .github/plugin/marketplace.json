@@ -1,0 +1,17 @@
+{
+  "name": "copilot-gitlab-canvas",
+  "owner": {
+    "name": "maruTA-bis5"
+  },
+  "metadata": {
+    "description": "GitLab Canvas plugin marketplace for GitHub Copilot App."
+  },
+  "plugins": [
+    {
+      "name": "gitlab-canvas",
+      "source": "./",
+      "version": "1.0.0",
+      "description": "Browse and interact with GitLab issues and merge requests in a Copilot Canvas."
+    }
+  ]
+}

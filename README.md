@@ -20,6 +20,54 @@ and authenticated.
   supplementary data could not be loaded.
 - Japanese and English UI labels, plus automatic locale selection.
 
+## Install (Copilot App)
+
+Identifiers used below:
+- Marketplace: `copilot-gitlab-canvas`
+- Plugin / extension directory: `gitlab-canvas`
+- Canvas ID: `gitlab`
+
+> **Note**: Currently, installing the plugin alone only installs the agent
+> skill (`skills/gitlab-canvas/SKILL.md`), not the canvas extension under
+> `.github/extensions/gitlab-canvas/`. Follow both steps below when using the
+> extension from another repository.
+
+### 1. Install the canvas extension
+
+If you open this repository directly in Copilot App,
+`.github/extensions/gitlab-canvas/extension.mjs` is discovered automatically—do
+not run `install_extension` (especially with `project` scope) on this repository
+itself.
+
+To use the canvas in other repositories, ask Copilot App to run
+`install_extension` with:
+
+- **URL**: `https://github.com/maruTA-bis5/copilot-gitlab-canvas/tree/main/.github/extensions/gitlab-canvas`
+- **Name**: `gitlab-canvas`
+- **Scope**: `user` (recommended; available across all repositories) or `project` (writes into the target repository's `.github/extensions/gitlab-canvas/`)
+
+`install_extension` automatically reloads extensions after installation. If the
+`gitlab` canvas still does not appear, ask the agent to run `extensions_reload`.
+Because `user` scope installs a snapshot of `tree/main`, re-run
+`install_extension` when updating to a newer version.
+
+### 2. Install the agent skill (optional, recommended)
+
+To install the `gitlab-canvas` skill in Copilot App:
+
+- **In Copilot App UI**: Open **Customize**, add `maruTA-bis5/copilot-gitlab-canvas`
+  as a plugin marketplace, and install `gitlab-canvas`.
+- **Using Copilot CLI** (when `copilot` is on `PATH` and shares configuration
+  with Copilot App):
+
+  ```sh
+  copilot plugin marketplace add maruTA-bis5/copilot-gitlab-canvas
+  copilot plugin install gitlab-canvas@copilot-gitlab-canvas
+  ```
+
+After installing, proceed to [Use](#use) to set up `glab` authentication (or
+use the GitLab MCP fallback).
+
 ## Use
 
 The extension is discovered from
