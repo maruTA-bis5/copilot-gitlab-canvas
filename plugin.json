@@ -1,0 +1,6 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "gitlab-canvas",
+  "version": "1.0.0",
+  "description": "Browse and interact with GitLab issues and merge requests in a Copilot Canvas."
+}
