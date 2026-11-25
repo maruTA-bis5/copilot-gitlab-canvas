@@ -56,8 +56,13 @@ runtime npm dependencies or build step are required.
 
 ```powershell
 npm test
+npm run check
 ```
 
 The HTTP server binds to `127.0.0.1` on an ephemeral port. Each panel receives
 its own random request token, and the token is sent in an HTTP header for API,
 SSE, and upload requests.
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE).
