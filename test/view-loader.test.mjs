@@ -163,3 +163,27 @@ test("enriches merge request detail labels from project definitions", async () =
   ]);
   assert.deepEqual(result.warnings, []);
 });
+
+test("includes current-user approval eligibility from the approvals endpoint", async () => {
+  const result = await loadViewData(
+    {
+      getMergeRequest: async () => ({
+        iid: 8,
+        title: "MR",
+        state: "opened",
+      }),
+      getProjectLabels: async () => [],
+      getDiscussions: async () => [],
+      getMergeRequestChanges: async () => [],
+      getMergeRequestClosingIssues: async () => [],
+      getApprovals: async () => ({
+        user_has_approved: false,
+        user_can_approve: false,
+      }),
+    },
+    { view: "mr_detail", iid: 8, filters: {} },
+  );
+
+  assert.equal(result.data.mergeRequest.approvals.userApproved, false);
+  assert.equal(result.data.mergeRequest.approvals.userCanApprove, false);
+});

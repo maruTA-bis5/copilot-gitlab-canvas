@@ -573,6 +573,75 @@ time {
   gap: 7px;
 }
 
+.gitlab-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
+  gap: 7px;
+}
+
+.copilot-menu {
+  position: relative;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.copilot-menu-toggle {
+  border-color: var(--canvas-blue);
+}
+
+.copilot-menu-toggle:hover {
+  background: var(--canvas-surface-hover);
+}
+
+.copilot-menu-toggle[aria-expanded="true"] {
+  background: var(--canvas-surface-hover);
+}
+
+.copilot-menu-toggle svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.copilot-menu-panel {
+  position: absolute;
+  z-index: 4;
+  top: calc(100% + 6px);
+  right: 0;
+  width: min(15rem, calc(100vw - 24px));
+  padding: 4px;
+  border: 1px solid var(--canvas-border);
+  border-radius: 8px;
+  background: var(--canvas-bg);
+  color: var(--canvas-text);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 22%);
+}
+
+.copilot-menu-panel[hidden] {
+  display: none;
+}
+
+.copilot-menu-item {
+  display: flex;
+  width: 100%;
+  justify-content: flex-start;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--canvas-text);
+  text-align: left;
+  white-space: normal;
+}
+
+.copilot-menu-item:hover,
+.copilot-menu-item:focus-visible {
+  background: var(--canvas-surface-hover);
+}
+
 .detail-tabs {
   border-bottom: 1px solid var(--canvas-border);
 }

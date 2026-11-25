@@ -185,6 +185,8 @@ export async function loadViewData(client, state) {
       approvals?.approvals_before_merge ?? mergeRequest.approvals_before_merge,
     user_has_approved:
       approvals?.user_has_approved ?? mergeRequest.user_has_approved,
+    user_can_approve:
+      approvals?.user_can_approve ?? mergeRequest.user_can_approve,
   };
   const [mergeRequestWithLabels] = await addProjectLabelDetails(
     client,

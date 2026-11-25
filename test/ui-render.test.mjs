@@ -152,6 +152,116 @@ test("uses Close and Reopen action labels for issues and merge requests", () => 
   assert.match(mrView("closed"), /data-state="opened"[^>]*>Reopen<\/button>/);
 });
 
+test("groups Copilot prompts in an accessible dropdown", () => {
+  const issueHtml = renderIssueDetail({
+    view: "issue_detail",
+    mode: "mcp",
+    project: { projectUrl: "https://gitlab.test/team/repo" },
+    messages: {
+      ...messages,
+      askCopilot: "Ask Copilot",
+      gitlabActions: "GitLab actions",
+      investigate: "Investigate this item",
+      plan: "Create an implementation plan",
+    },
+    data: {
+      issue: {
+        iid: 3,
+        title: "Issue",
+        state: "opened",
+        webUrl: "https://gitlab.test/team/repo/-/issues/3",
+        description: "",
+        assignees: [],
+        labels: [],
+      },
+      discussions: [],
+      relatedMergeRequests: [],
+      relatedIssues: [],
+    },
+  });
+  const mrHtml = renderMergeRequestDetail({
+    view: "mr_detail",
+    mode: "mcp",
+    project: { projectUrl: "https://gitlab.test/team/repo" },
+    messages: {
+      ...messages,
+      askCopilot: "Ask Copilot",
+      gitlabActions: "GitLab actions",
+      review: "Review this merge request",
+      fixFeedback: "Address review feedback",
+    },
+    data: {
+      mergeRequest: {
+        iid: 8,
+        title: "MR",
+        state: "opened",
+        status: "opened",
+        webUrl: "https://gitlab.test/team/repo/-/merge_requests/8",
+        description: "",
+        approvals: { userApproved: false },
+        assignees: [],
+        labels: [],
+      },
+      discussions: [],
+      diffs: [],
+      relatedIssues: [],
+    },
+  });
+
+  for (const html of [issueHtml, mrHtml]) {
+    assert.match(html, /aria-haspopup="menu"/);
+    assert.match(html, /aria-expanded="false"/);
+    assert.match(html, /role="menu"/);
+    assert.match(html, /role="menuitem"/);
+    assert.match(html, /class="gitlab-actions" role="group"/);
+  }
+  assert.match(issueHtml, /data-intent="investigate"[^>]*>Investigate this item<\/button>/);
+  assert.match(issueHtml, /data-intent="plan"[^>]*>Create an implementation plan<\/button>/);
+  assert.match(mrHtml, /data-intent="review"[^>]*>Review this merge request<\/button>/);
+  assert.match(mrHtml, /data-intent="fix"[^>]*>Address review feedback<\/button>/);
+  assert.match(
+    stylesheet,
+    /\.copilot-menu-panel\s*\{[^}]*width:\s*min\(15rem,\s*calc\(100vw - 24px\)\);[^}]*background:\s*var\(--canvas-bg\);[^}]*color:\s*var\(--canvas-text\);/,
+  );
+});
+
+test("shows only the valid approval action for the current MR state", () => {
+  const render = (state, approvals) =>
+    renderMergeRequestDetail({
+      view: "mr_detail",
+      mode: "mcp",
+      messages,
+      data: {
+        mergeRequest: {
+          iid: 8,
+          title: "MR",
+          state,
+          status: state,
+          description: "",
+          approvals,
+          assignees: [],
+          labels: [],
+        },
+        discussions: [],
+        diffs: [],
+        relatedIssues: [],
+      },
+    });
+  const commands = (html) =>
+    [...html.matchAll(/data-command="(approve|unapprove)"/g)].map(
+      (match) => match[1],
+    );
+
+  assert.deepEqual(commands(render("opened", { userApproved: false })), ["approve"]);
+  assert.deepEqual(commands(render("opened", { userApproved: true })), ["unapprove"]);
+  assert.deepEqual(
+    commands(render("opened", { userApproved: false, userCanApprove: false })),
+    [],
+  );
+  assert.deepEqual(commands(render("merged", { userApproved: false })), []);
+  assert.deepEqual(commands(render("closed", { userApproved: true })), []);
+});
+
 test("omits merged from the issue filter but retains it for merge requests", () => {
   const render = (view) =>
     renderListView({

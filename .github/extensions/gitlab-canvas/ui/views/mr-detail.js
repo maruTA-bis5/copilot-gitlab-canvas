@@ -2,6 +2,7 @@ import { renderMarkdown } from "../markdown.js";
 import { renderDiffFiles } from "../diff-viewer.js";
 import {
   escapeHtml,
+  renderCopilotMenu,
   renderDiscussionList,
   renderMetadataForm,
   renderRelatedItems,
@@ -69,11 +70,21 @@ export function renderMergeRequestDetail(state) {
   }
 
   const currentTab = state.activeTab === "changes" ? "changes" : "overview";
+  const approvals = mergeRequest.approvals ?? {};
   const stateAction = mergeRequest.state === "closed" ? "opened" : "closed";
   const stateControl =
     mergeRequest.state === "merged"
       ? ""
       : `<button type="button" class="secondary-button" data-command="set-state" data-state="${stateAction}" data-kind="merge_requests">${escapeHtml(stateAction === "closed" ? t.close || "Close" : t.reopen || "Reopen")}</button>`;
+  const approvalControl =
+    mergeRequest.state !== "opened"
+      ? ""
+      : approvals.userApproved === true
+        ? `<button type="button" class="secondary-button" data-command="unapprove">${escapeHtml(t.unapprove || "Unapprove")}</button>`
+        : approvals.userCanApprove === false
+          ? ""
+          : `<button type="button" class="secondary-button" data-command="approve">${escapeHtml(t.approve || "Approve")}</button>`;
+  const gitlabControls = [stateControl, approvalControl].filter(Boolean).join("");
   const statusLabel = mergeRequest.status === "draft"
     ? t.draft || "Draft"
     : t[mergeRequest.status] || mergeRequest.status;
@@ -93,11 +104,18 @@ export function renderMergeRequestDetail(state) {
       <a class="secondary-button" href="${escapeHtml(safeExternalUrl(mergeRequest.webUrl))}" target="_blank" rel="noopener noreferrer">${escapeHtml(t.openInGitLab || "Open in GitLab")}</a>
     </div>
     <div class="detail-actions">
-      ${stateControl}
-      <button type="button" class="secondary-button" data-command="approve"${mergeRequest.state !== "opened" ? " disabled" : ""}>${escapeHtml(t.approve || "Approve")}</button>
-      <button type="button" class="secondary-button" data-command="unapprove"${mergeRequest.state !== "opened" ? " disabled" : ""}>${escapeHtml(t.unapprove || "Unapprove")}</button>
-      <button type="button" class="secondary-button" data-command="chat" data-intent="review">${escapeHtml(t.review || "Review this merge request")}</button>
-      <button type="button" class="secondary-button" data-command="chat" data-intent="fix">${escapeHtml(t.fixFeedback || "Address review feedback")}</button>
+      ${
+        gitlabControls
+          ? `<div class="gitlab-actions" role="group" aria-label="${escapeHtml(t.gitlabActions || "GitLab actions")}">${gitlabControls}</div>`
+          : ""
+      }
+      ${renderCopilotMenu(
+        [
+          { intent: "review", label: t.review || "Review this merge request" },
+          { intent: "fix", label: t.fixFeedback || "Address review feedback" },
+        ],
+        t,
+      )}
     </div>
     <nav class="detail-tabs" aria-label="Merge request sections">
       <button type="button" data-tab="overview" class="${currentTab === "overview" ? "active" : ""}">${escapeHtml(t.overview || "Overview")}</button>

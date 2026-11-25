@@ -146,6 +146,11 @@ export function normalizeMergeRequest(value = {}) {
     ? value.approved_by.map((entry) => normalizeUser(entry.user ?? entry)).filter(Boolean)
     : [];
   const approvals = value.approvals ?? {};
+  const userCanApprove =
+    value.user_can_approve ??
+    value.userCanApprove ??
+    approvals.user_can_approve ??
+    approvals.userCanApprove;
   const approvalsRequired = number(
     value.approvals_before_merge ??
       approvals.approvals_required ??
@@ -190,8 +195,14 @@ export function normalizeMergeRequest(value = {}) {
       approved: approvalsApproved,
       approvedBy,
       userApproved: Boolean(
-        value.user_has_approved ?? approvals.user_has_approved ?? false,
+        value.user_has_approved ??
+          value.userApproved ??
+          approvals.user_has_approved ??
+          approvals.userApproved ??
+          false,
       ),
+      userCanApprove:
+        userCanApprove == null ? undefined : Boolean(userCanApprove),
     },
   };
 }

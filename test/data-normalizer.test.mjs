@@ -97,6 +97,32 @@ test("normalizes merge request draft, pipeline, and approval metadata", () => {
   assert.equal(mr.approvals.userApproved, false);
 });
 
+test("preserves approval eligibility from GitLab and normalized payloads", () => {
+  const gitlab = normalizeMergeRequest({
+    state: "opened",
+    user_has_approved: true,
+    user_can_approve: false,
+  });
+  assert.equal(gitlab.approvals.userApproved, true);
+  assert.equal(gitlab.approvals.userCanApprove, false);
+
+  const normalized = normalizeMergeRequest({
+    state: "opened",
+    approvals: {
+      userApproved: true,
+      userCanApprove: false,
+    },
+  });
+  assert.equal(normalized.approvals.userApproved, true);
+  assert.equal(normalized.approvals.userCanApprove, false);
+
+  const unknown = normalizeMergeRequest({
+    state: "opened",
+    approvals: { userCanApprove: null },
+  });
+  assert.equal(unknown.approvals.userCanApprove, undefined);
+});
+
 test("normalizes discussion threads including inline diff positions", () => {
   assert.deepEqual(
     normalizeDiscussions([

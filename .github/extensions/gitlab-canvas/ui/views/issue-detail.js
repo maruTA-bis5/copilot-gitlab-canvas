@@ -1,6 +1,7 @@
 import { renderMarkdown } from "../markdown.js";
 import {
   escapeHtml,
+  renderCopilotMenu,
   renderDiscussionList,
   renderMetadataForm,
   renderRelatedItems,
@@ -32,9 +33,16 @@ export function renderIssueDetail(state) {
       <a class="secondary-button" href="${escapeHtml(safeExternalUrl(issue.webUrl))}" target="_blank" rel="noopener noreferrer">${escapeHtml(t.openInGitLab || "Open in GitLab")}</a>
     </div>
     <div class="detail-actions">
-      <button type="button" class="secondary-button" data-command="set-state" data-state="${statusAction}">${escapeHtml(statusAction === "closed" ? t.close || "Close" : t.reopen || "Reopen")}</button>
-      <button type="button" class="secondary-button" data-command="chat" data-intent="investigate">${escapeHtml(t.investigate || "Investigate this item")}</button>
-      <button type="button" class="secondary-button" data-command="chat" data-intent="plan">${escapeHtml(t.plan || "Create an implementation plan")}</button>
+      <div class="gitlab-actions" role="group" aria-label="${escapeHtml(t.gitlabActions || "GitLab actions")}">
+        <button type="button" class="secondary-button" data-command="set-state" data-state="${statusAction}">${escapeHtml(statusAction === "closed" ? t.close || "Close" : t.reopen || "Reopen")}</button>
+      </div>
+      ${renderCopilotMenu(
+        [
+          { intent: "investigate", label: t.investigate || "Investigate this item" },
+          { intent: "plan", label: t.plan || "Create an implementation plan" },
+        ],
+        t,
+      )}
     </div>
     <div class="detail-layout">
       <div class="detail-main">

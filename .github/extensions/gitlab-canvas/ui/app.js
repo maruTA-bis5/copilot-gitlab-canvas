@@ -29,6 +29,36 @@ function message(key, fallback) {
   return state?.messages?.[key] || fallback || key;
 }
 
+function closeCopilotMenus({ restoreFocus = false } = {}) {
+  for (const dropdown of app.querySelectorAll("[data-copilot-menu]")) {
+    const toggle = dropdown.querySelector("[data-copilot-menu-toggle]");
+    const menu = dropdown.querySelector('[role="menu"]');
+    const wasOpen = toggle?.getAttribute("aria-expanded") === "true";
+    toggle?.setAttribute("aria-expanded", "false");
+    if (menu) {
+      menu.hidden = true;
+    }
+    if (restoreFocus && wasOpen) {
+      toggle?.focus();
+    }
+  }
+}
+
+function toggleCopilotMenu(toggle) {
+  const dropdown = toggle.closest("[data-copilot-menu]");
+  const menu = dropdown?.querySelector('[role="menu"]');
+  if (!menu) {
+    return;
+  }
+  const shouldOpen = toggle.getAttribute("aria-expanded") !== "true";
+  closeCopilotMenus();
+  if (shouldOpen) {
+    toggle.setAttribute("aria-expanded", "true");
+    menu.hidden = false;
+    menu.querySelector('[role="menuitem"]')?.focus();
+  }
+}
+
 function renderBody() {
   if (state.view === "issue_list" || state.view === "mr_list") {
     return renderListView(state);
@@ -254,6 +284,15 @@ app.addEventListener("change", (event) => {
 });
 
 app.addEventListener("click", (event) => {
+  const menuToggle = event.target.closest("[data-copilot-menu-toggle]");
+  if (menuToggle) {
+    toggleCopilotMenu(menuToggle);
+    return;
+  }
+  if (!event.target.closest("[data-copilot-menu]")) {
+    closeCopilotMenus();
+  }
+
   const reference = event.target.closest("[data-reference-kind][data-iid]");
   if (reference) {
     event.preventDefault();
@@ -331,12 +370,62 @@ app.addEventListener("click", (event) => {
       remove: [button.dataset.label],
     });
   } else if (command === "chat") {
+    closeCopilotMenus();
     void performAction({
       type: "chat",
       kind: currentKind(),
       iid: currentIid(),
       intent: button.dataset.intent,
     });
+  }
+});
+
+document.addEventListener("click", (event) => {
+  if (!event.target.closest?.("[data-copilot-menu]")) {
+    closeCopilotMenus();
+  }
+});
+
+document.addEventListener("keydown", (event) => {
+  const menuItem = event.target.closest?.(
+    '[data-copilot-menu] [role="menuitem"]',
+  );
+  if (menuItem) {
+    const items = [
+      ...menuItem
+        .closest('[role="menu"]')
+        .querySelectorAll('[role="menuitem"]'),
+    ];
+    const currentIndex = items.indexOf(menuItem);
+    const nextIndex =
+      event.key === "ArrowDown"
+        ? (currentIndex + 1) % items.length
+        : event.key === "ArrowUp"
+          ? (currentIndex - 1 + items.length) % items.length
+          : event.key === "Home"
+            ? 0
+            : event.key === "End"
+              ? items.length - 1
+              : -1;
+    if (nextIndex >= 0) {
+      event.preventDefault();
+      items[nextIndex]?.focus();
+      return;
+    }
+    if (event.key === "Tab") {
+      closeCopilotMenus();
+    }
+  }
+
+  if (event.key !== "Escape") {
+    return;
+  }
+  const menuIsOpen = app.querySelector(
+    '[data-copilot-menu-toggle][aria-expanded="true"]',
+  );
+  if (menuIsOpen) {
+    event.preventDefault();
+    closeCopilotMenus({ restoreFocus: true });
   }
 });
 

@@ -90,6 +90,20 @@ export function renderLabels(labels, { removable = false } = {}) {
     .join("");
 }
 
+export function renderCopilotMenu(items, messages = {}) {
+  const label = messages.askCopilot || "Ask Copilot";
+  return `<div class="copilot-menu" data-copilot-menu>
+    <button type="button" class="secondary-button copilot-menu-toggle" data-copilot-menu-toggle aria-haspopup="menu" aria-expanded="false" aria-controls="gitlab-canvas-copilot-menu">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 1.25c.38 3.02 1.73 4.37 4.75 4.75C9.73 6.38 8.38 7.73 8 10.75 7.62 7.73 6.27 6.38 3.25 6 6.27 5.62 7.62 4.27 8 1.25Zm4.5 8.5c.16 1.27.73 1.84 2 2-1.27.16-1.84.73-2 2-.16-1.27-.73-1.84-2-2 1.27-.16 1.84-.73 2-2Z" /></svg>
+      <span>${escapeHtml(label)}</span>
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="m4 6 4 4 4-4" /></svg>
+    </button>
+    <div id="gitlab-canvas-copilot-menu" class="copilot-menu-panel" role="menu" aria-label="${escapeHtml(label)}" hidden>
+      ${items.map(({ intent, label: itemLabel }) => `<button type="button" class="copilot-menu-item" role="menuitem" tabindex="-1" data-command="chat" data-intent="${escapeHtml(intent)}">${escapeHtml(itemLabel)}</button>`).join("")}
+    </div>
+  </div>`;
+}
+
 export function renderPeople(people) {
   if (!Array.isArray(people) || !people.length) {
     return `<span class="muted">—</span>`;
