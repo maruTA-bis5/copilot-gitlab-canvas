@@ -7,6 +7,7 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 const sourceRoots = [
   resolve(root, ".github", "extensions", "gitlab-canvas"),
   resolve(root, "test"),
+  resolve(root, "scripts"),
 ];
 
 function findSourceFiles(directory) {
@@ -27,7 +28,8 @@ for (const file of sourceFiles) {
   execFileSync(process.execPath, ["--check", file], { stdio: "inherit" });
 }
 
-for (const file of ["package.json", "plugin.json"]) {
+const jsonFiles = ["package.json", "plugin.json"];
+for (const file of jsonFiles) {
   const path = resolve(root, file);
   try {
     JSON.parse(readFileSync(path, "utf8"));
@@ -39,5 +41,5 @@ for (const file of ["package.json", "plugin.json"]) {
 }
 
 process.stdout.write(
-  `Checked ${sourceFiles.length} JavaScript files and 2 JSON files.\n`,
+  `Checked ${sourceFiles.length} JavaScript files and ${jsonFiles.length} JSON files.\n`,
 );

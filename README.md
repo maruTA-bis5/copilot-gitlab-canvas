@@ -54,7 +54,9 @@ the panel with the `set_view_data` action. The detailed agent procedure is in
 The extension and its renderer use Node.js and browser standard APIs only; no
 runtime npm dependencies or build step are required.
 
-```powershell
+CI runs the same commands on Linux and Windows:
+
+```sh
 npm test
 npm run check
 ```
