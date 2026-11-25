@@ -5,6 +5,7 @@ import {
   normalizeMergeRequestDiffs,
   normalizeViewData,
 } from "./data-normalizer.mjs";
+import { normalizeFilters } from "./panel-navigation.mjs";
 
 async function optionalResult(warnings, label, request, fallback) {
   try {
@@ -73,7 +74,8 @@ async function addProjectLabelDetails(client, items, warnings) {
 
 export async function loadViewData(client, state) {
   if (state.view === "issue_list") {
-    const items = await client.listIssues(state.filters);
+    const filters = normalizeFilters(state.filters, {}, state.view);
+    const items = await client.listIssues(filters);
     const warnings = [];
     const itemsWithLabels = await addProjectLabelDetails(client, items, warnings);
     return {

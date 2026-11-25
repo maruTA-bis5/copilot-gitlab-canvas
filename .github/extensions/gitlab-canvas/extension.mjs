@@ -337,7 +337,7 @@ async function openCanvasInternal(ctx) {
   const view = views.has(input.view)
     ? input.view
     : urlTarget?.view ?? (views.has(saved?.view) ? saved.view : "mr_list");
-  const filters = normalizeFilters(input.filters, saved?.filters);
+  const filters = normalizeFilters(input.filters, saved?.filters, view);
   const dataIid =
     input.data?.issue?.iid ??
     input.data?.mergeRequest?.iid ??

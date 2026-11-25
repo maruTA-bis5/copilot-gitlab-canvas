@@ -24,15 +24,25 @@ export function renderHeader(state = {}) {
         : null;
   const itemNumber = state.iid ?? item?.iid;
   const prefix = isIssues ? "#" : "!";
-  const title =
-    item
-      ? [itemNumber == null ? "" : `${prefix}${itemNumber}`, item.title]
-          .filter(Boolean)
-          .join(" ")
-      : isIssues
-        ? message("issues", "Issues")
-        : message("mergeRequests", "Merge requests");
+  const isDetail = view === "issue_detail" || view === "mr_detail";
+  let title;
+  if (item) {
+    title = [itemNumber == null ? "" : `${prefix}${itemNumber}`, item.title]
+      .filter(Boolean)
+      .join(" ");
+  } else if (isDetail && itemNumber != null) {
+    title = `${prefix}${itemNumber}`;
+  } else {
+    title = isIssues
+      ? message("issues", "Issues")
+      : message("mergeRequests", "Merge requests");
+  }
   const tooltip = [title, projectPath].filter(Boolean).join(" — ");
+  const projectUrl = safeExternalUrl(state.project?.projectUrl);
+  const openLink =
+    projectUrl && projectUrl !== "#"
+      ? `<a class="secondary-button" href="${escapeHtml(projectUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(message("openInGitLab", "Open in GitLab"))}</a>`
+      : "";
 
   return `<header class="app-header">
     <div class="brand" title="${escapeHtml(tooltip)}">
@@ -46,7 +56,7 @@ export function renderHeader(state = {}) {
     <div class="header-actions">
       <span class="mode-indicator" title="${escapeHtml(message("backend", "Backend"))}">${escapeHtml(mode)}</span>
       <button type="button" class="secondary-button" data-command="refresh">${escapeHtml(message("refresh", "Refresh"))}</button>
-      <a class="secondary-button" href="${escapeHtml(safeExternalUrl(state.project?.projectUrl))}" target="_blank" rel="noopener noreferrer">${escapeHtml(message("openInGitLab", "Open in GitLab"))}</a>
+      ${openLink}
       <label class="language-select">${escapeHtml(message("language", "Language"))}
         <select data-language>
           <option value="auto"${lang === "auto" ? " selected" : ""}>Auto</option>

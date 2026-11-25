@@ -53,3 +53,18 @@ test("returns a loaded state only after the requested data succeeds", async () =
   assert.deepEqual(next.data, { mergeRequest: { iid: 8 } });
   assert.deepEqual(initialState.data, { items: [{ iid: 1 }] });
 });
+
+test("resets a merged filter when navigating from merge requests to issues", async () => {
+  const state = {
+    ...initialState,
+    view: "mr_list",
+    filters: { ...initialState.filters, state: "merged" },
+  };
+  const next = await prepareNavigationState(state, {
+    view: "issue_list",
+    filters: state.filters,
+  });
+
+  assert.equal(next.view, "issue_list");
+  assert.equal(next.filters.state, "opened");
+});

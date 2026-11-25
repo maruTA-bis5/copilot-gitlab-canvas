@@ -47,6 +47,21 @@ test("does not suppress failure of the primary issue request", async () => {
   );
 });
 
+test("normalizes merged state before loading the issue list", async () => {
+  let receivedFilters;
+  await loadViewData(
+    {
+      listIssues: async (filters) => {
+        receivedFilters = filters;
+        return [];
+      },
+    },
+    { view: "issue_list", filters: { state: "merged", page: 1 } },
+  );
+
+  assert.equal(receivedFilters.state, "opened");
+});
+
 test("enriches list labels from project definitions when detailed data is missing", async () => {
   let labelRequests = 0;
   const result = await loadViewData(

@@ -150,8 +150,8 @@ test("binds only to loopback and proxies uploads behind the panel token", async 
     proxyUpload: async (uploadPath) => {
       proxyCalls += 1;
       return {
-        body: Buffer.from(uploadPath),
-        contentType: "image/png",
+        body: Buffer.from("<svg/>"),
+        contentType: "image/svg+xml",
       };
     },
   });
@@ -163,8 +163,9 @@ test("binds only to loopback and proxies uploads behind the panel token", async 
     const response = await fetch(new URL("uploads/hash/file.png", url), {
       headers: { "x-gitlab-canvas-token": "secret" },
     });
-    assert.equal(response.headers.get("content-type"), "image/png");
-    assert.equal(await response.text(), "/uploads/hash/file.png");
+    assert.equal(response.headers.get("content-type"), "image/svg+xml");
+    assert.equal(response.headers.get("content-security-policy"), "sandbox");
+    assert.equal(await response.text(), "<svg/>");
 
     const traversal = await getRawPath(address.port, "/uploads/%2e%2e/secret", {
       "x-gitlab-canvas-token": "secret",

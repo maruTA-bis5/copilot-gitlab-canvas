@@ -1,6 +1,9 @@
 import { execFile } from "node:child_process";
 import { win32 as win32Path } from "node:path";
 
+const PROJECT_LABELS_PAGE_SIZE = 100;
+const MAX_PROJECT_LABEL_PAGES = 100;
+
 export class GlabError extends Error {
   constructor(message, { code = "glab_error", exitCode = null, cause } = {}) {
     super(message, { cause });
@@ -14,6 +17,10 @@ function sanitizeOutput(value) {
   return String(value ?? "")
     .replace(/((?:private-token|job-token|access-token|token)\s*[:=]\s*)\S+/gi, "$1[redacted]")
     .replace(/(authorization\s*[:=]\s*)(?:bearer\s+)?\S+/gi, "$1[redacted]")
+    .replace(
+      /([a-z][a-z0-9+.-]*:\/\/[^/@\s:]+:)[^/@\s]+@/gi,
+      "$1[redacted]@",
+    )
     .slice(0, 1000)
     .trim();
 }
@@ -50,7 +57,7 @@ function fieldArguments(fields) {
     if (value == null) {
       continue;
     }
-    if (typeof value === "object") {
+    if (typeof value === "object" || typeof value === "boolean") {
       args.push("--field", `${key}=${JSON.stringify(withoutNullFields(value))}`);
     } else {
       args.push("--raw-field", `${key}=${String(value)}`);
@@ -288,10 +295,28 @@ export class GlabClient {
     );
   }
 
-  getProjectLabels() {
-    return this.api("GET", this.projectEndpoint("labels"), {
-      query: { per_page: 100, page: 1 },
-    });
+  async getProjectLabels() {
+    const labels = [];
+    for (let page = 1; page <= MAX_PROJECT_LABEL_PAGES; page += 1) {
+      const currentPage = await this.api(
+        "GET",
+        this.projectEndpoint("labels"),
+        { query: { per_page: PROJECT_LABELS_PAGE_SIZE, page } },
+      );
+      if (!Array.isArray(currentPage)) {
+        throw new GlabError("GitLab returned an invalid project labels response.", {
+          code: "glab_invalid_response",
+        });
+      }
+      labels.push(...currentPage);
+      if (currentPage.length < PROJECT_LABELS_PAGE_SIZE) {
+        return labels;
+      }
+    }
+    throw new GlabError(
+      `GitLab project labels exceeded the ${MAX_PROJECT_LABEL_PAGES}-page safety limit.`,
+      { code: "glab_pagination_limit" },
+    );
   }
 
   getDiscussions(kind, iid) {
@@ -433,29 +458,32 @@ export class GlabClient {
   }
 
   async updateLabels(kind, iid, { add = [], remove = [] } = {}) {
-    const current =
-      kind === "issues" ? await this.getIssue(iid) : await this.getMergeRequest(iid);
-    const labels = new Set(
-      (Array.isArray(current.labels) ? current.labels : [])
-        .map((label) =>
-          typeof label === "string" ? label : label?.name,
-        )
-        .filter((name) => typeof name === "string" && name.trim())
-        .map((name) => name.trim()),
+    const normalizeNames = (values) =>
+      [...new Set(
+        (Array.isArray(values) ? values : [])
+          .map((label) => String(label ?? "").trim())
+          .filter(Boolean),
+      )];
+    const addLabels = normalizeNames(add);
+    const addLabelSet = new Set(addLabels);
+    const removeLabels = normalizeNames(remove).filter(
+      (label) => !addLabelSet.has(label),
     );
-    for (const label of remove) {
-      labels.delete(String(label));
+    const fields = {};
+    if (addLabels.length) {
+      fields.add_labels = addLabels.join(",");
     }
-    for (const label of add) {
-      if (String(label).trim()) {
-        labels.add(String(label).trim());
-      }
+    if (removeLabels.length) {
+      fields.remove_labels = removeLabels.join(",");
+    }
+    if (!Object.keys(fields).length) {
+      return null;
     }
     const resource = kind === "issues" ? "issues" : "merge_requests";
     return this.api(
       "PUT",
       this.projectEndpoint(`${resource}/${Number(iid)}`),
-      { fields: { labels: [...labels].join(",") } },
+      { fields },
     );
   }
 

@@ -190,6 +190,7 @@ export function createCanvasHttpServer({
         "content-type": contentType,
         "cache-control": "private, no-store",
         "x-content-type-options": "nosniff",
+        "content-security-policy": "sandbox",
       });
       response.end(Buffer.isBuffer(upload.body) ? upload.body : Buffer.from(upload.body ?? ""));
       return;

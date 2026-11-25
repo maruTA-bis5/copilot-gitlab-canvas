@@ -12,12 +12,15 @@ function navigationError(code, message) {
   return Object.assign(new Error(message), { code });
 }
 
-export function normalizeFilters(filters = {}, previous = {}) {
-  const state = stateValues.has(filters.state)
+export function normalizeFilters(filters = {}, previous = {}, view) {
+  let state = stateValues.has(filters.state)
     ? filters.state
     : stateValues.has(previous.state)
       ? previous.state
       : "opened";
+  if (view === "issue_list" && state === "merged") {
+    state = "opened";
+  }
   return {
     state,
     search: String(filters.search ?? previous.search ?? ""),
@@ -66,7 +69,7 @@ export async function prepareNavigationState(state, input = {}, loadData) {
     ...state,
     view,
     iid,
-    filters: normalizeFilters(input.filters ?? {}, state.filters),
+    filters: normalizeFilters(input.filters ?? {}, state.filters, view),
     data: null,
     error: null,
     pending: false,

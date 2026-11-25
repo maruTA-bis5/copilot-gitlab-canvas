@@ -15,6 +15,10 @@ const stylesheet = readFileSync(
   new URL("../.github/extensions/gitlab-canvas/ui/styles.css", import.meta.url),
   "utf8",
 );
+const htmlShell = readFileSync(
+  new URL("../.github/extensions/gitlab-canvas/ui/index.html", import.meta.url),
+  "utf8",
+);
 
 const messages = {
   openInGitLab: "Open in GitLab",
@@ -227,6 +231,7 @@ test("renders the GitLab icon and issue title in the header", () => {
   assert.match(html, /<svg class="gitlab-icon"[^>]*aria-hidden="true"/);
   assert.match(html, /<span class="header-title">#42 Improve &amp; verify labels<\/span>/);
   assert.match(html, /title="[^"]*team\/repo/);
+  assert.match(html, /href="https:\/\/gitlab\.test\/team\/repo"/);
   assert.doesNotMatch(html, /<span class="header-title">team\/repo<\/span>/);
 
   const mrHtml = renderHeader({
@@ -261,7 +266,27 @@ test("uses localized list names instead of the project path in the header", () =
     messages: { issues: "Issues" },
   });
   assert.doesNotMatch(unsafe, /href="javascript:/i);
-  assert.match(unsafe, /href="#"/);
+  assert.doesNotMatch(unsafe, /target="_blank"/);
+});
+
+test("shows item IIDs while detail data is loading and hides unavailable links", () => {
+  const issueHtml = renderHeader({
+    view: "issue_detail",
+    iid: 42,
+    project: { path: "team/repo" },
+    data: {},
+  });
+  const mrHtml = renderHeader({
+    view: "mr_detail",
+    iid: 8,
+    project: { path: "team/repo" },
+    data: {},
+  });
+
+  assert.match(issueHtml, /<span class="header-title">#42<\/span>/);
+  assert.match(mrHtml, /<span class="header-title">!8<\/span>/);
+  assert.doesNotMatch(issueHtml, /<a\b[^>]*target="_blank"/);
+  assert.doesNotMatch(issueHtml, /href="#"/);
 });
 
 test("keeps header controls on one line while allowing the header to wrap", () => {
@@ -352,9 +377,33 @@ test("uses only theme-contract colors and adaptive surfaces in dark mode", () =>
     stylesheet,
     /--(?:background-color-secondary|background-color-danger|background-color-success|color-accent-emphasis|text-color-link)\b/,
   );
-  assert.doesNotMatch(stylesheet, /#(?:f6f8fa|ffebe9|dafbe1)\b/i);
   assert.match(stylesheet, /color-mix\(\s*in srgb/);
   assert.match(stylesheet, /:root\[data-color-mode="dark"\]/);
   assert.match(stylesheet, /body\[data-color-mode="dark"\]/);
   assert.match(stylesheet, /@media \(prefers-color-scheme: dark\)/);
+  assert.match(stylesheet, /--canvas-bg:\s*var\(--background-color-default,\s*#ffffff\)/);
+  assert.match(stylesheet, /--canvas-bg:\s*var\(--background-color-default,\s*#0d1117\)/);
+  assert.match(stylesheet, /--canvas-green:\s*var\(--true-color-green,\s*#[0-9a-f]{6}\)/i);
+  assert.match(stylesheet, /--canvas-yellow:\s*var\(--true-color-yellow,\s*#[0-9a-f]{6}\)/i);
+  assert.match(stylesheet, /--status-bar-color:\s*var\(--canvas-bg\)/);
+  assert.doesNotMatch(htmlShell, /<meta[^>]+name="theme-color"[^>]*var\(/i);
+});
+
+test("uses visible dark-mode hovers and constrains narrow tables and header rows", () => {
+  assert.match(
+    stylesheet,
+    /\.secondary-button:hover\s*\{[^}]*background:\s*var\(--canvas-surface-hover\)/,
+  );
+  assert.match(
+    stylesheet,
+    /\.primary-button:hover\s*\{[^}]*background:\s*color-mix/,
+  );
+  assert.match(
+    stylesheet,
+    /\.markdown-body table\s*\{[^}]*display:\s*block;[^}]*max-width:\s*100%;[^}]*overflow-x:\s*auto;/,
+  );
+  assert.match(
+    stylesheet,
+    /@media \(max-width: 620px\)[\s\S]*?\.header-actions\s*\{[^}]*justify-content:\s*flex-start;[^}]*margin-left:\s*0;/,
+  );
 });

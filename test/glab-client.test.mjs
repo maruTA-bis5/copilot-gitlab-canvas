@@ -65,16 +65,79 @@ test("requests detailed labels for lists and individual items", async () => {
   assert.match(targets[4], /\/labels\?per_page=100&page=1/);
 });
 
-test("updates labels by name when GitLab returns label detail objects", async () => {
-  const { calls, execFileImpl } = fakeExecFile([
-    {
-      stdout: JSON.stringify({
-        labels: [
-          { name: "bug", color: "#d73a4a", text_color: "#ffffff" },
-          { name: "docs", color: "#0075ca", text_color: "#ffffff" },
-        ],
-      }),
+test("serializes booleans as typed fields while preserving empty raw fields", async () => {
+  const { calls, execFileImpl } = fakeExecFile([{ stdout: "{}" }]);
+  const client = new GlabClient({
+    host: "gitlab.example.com",
+    project: "team/repo",
+    execFileImpl,
+  });
+
+  await client.api("PUT", "/projects/1", {
+    fields: {
+      enabled: true,
+      disabled: false,
+      empty: "",
+      assignee_ids: [7],
     },
+  });
+
+  assert.deepEqual(calls[0].args.slice(-8), [
+    "--field",
+    "enabled=true",
+    "--field",
+    "disabled=false",
+    "--raw-field",
+    "empty=",
+    "--field",
+    "assignee_ids=[7]",
+  ]);
+});
+
+test("paginates through project label definitions", async () => {
+  const firstPage = Array.from({ length: 100 }, (_, index) => ({
+    name: `label-${index}`,
+  }));
+  const { calls, execFileImpl } = fakeExecFile([
+    { stdout: JSON.stringify(firstPage) },
+    { stdout: JSON.stringify([{ name: "label-100" }]) },
+  ]);
+  const client = new GlabClient({
+    host: "gitlab.example.com",
+    project: "team/repo",
+    execFileImpl,
+  });
+
+  const labels = await client.getProjectLabels();
+
+  assert.equal(labels.length, 101);
+  assert.match(calls[0].args.at(-1), /\/labels\?per_page=100&page=1/);
+  assert.match(calls[1].args.at(-1), /\/labels\?per_page=100&page=2/);
+});
+
+test("stops label pagination at the configured safety limit", async () => {
+  const fullPage = JSON.stringify(
+    Array.from({ length: 100 }, () => ({ name: "label" })),
+  );
+  const { calls, execFileImpl } = fakeExecFile(
+    Array.from({ length: 100 }, () => ({
+      stdout: fullPage,
+    })),
+  );
+  const client = new GlabClient({
+    host: "gitlab.example.com",
+    project: "team/repo",
+    execFileImpl,
+  });
+
+  await assert.rejects(client.getProjectLabels(), {
+    code: "glab_pagination_limit",
+  });
+  assert.equal(calls.length, 100);
+});
+
+test("updates labels atomically using trimmed add and remove fields", async () => {
+  const { calls, execFileImpl } = fakeExecFile([
     { stdout: "{}" },
   ]);
   const client = new GlabClient({
@@ -84,11 +147,14 @@ test("updates labels by name when GitLab returns label detail objects", async ()
   });
 
   await client.updateLabels("issues", 7, {
-    add: ["triage"],
-    remove: ["bug"],
+    add: [" triage ", "bug"],
+    remove: [" bug ", " docs "],
   });
 
-  assert.ok(calls[1].args.includes("labels=docs,triage"));
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0].args.includes("add_labels=triage,bug"));
+  assert.ok(calls[0].args.includes("remove_labels=docs"));
+  assert.ok(!calls[0].args.some((arg) => arg.startsWith("labels=")));
 });
 
 test("falls back to configured GLAB_PATH and GLAB_BIN after PATH lookup fails", async () => {
@@ -247,6 +313,26 @@ test("redacts bearer and private tokens from glab errors", async () => {
   await assert.rejects(client.getIssue(7), (error) => {
     assert.match(error.message, /\[redacted\]/);
     assert.doesNotMatch(error.message, /bearer-secret|glpat-private-secret/);
+    return true;
+  });
+});
+
+test("redacts credentials embedded in Basic-auth URLs", async () => {
+  const { execFileImpl } = fakeExecFile([
+    {
+      error: Object.assign(new Error("glab exited"), { code: 1 }),
+      stderr: "request failed: https://user:basic-secret@gitlab.example.com/api/v4",
+    },
+  ]);
+  const client = new GlabClient({
+    host: "gitlab.example.com",
+    project: "team/repo",
+    execFileImpl,
+  });
+
+  await assert.rejects(client.getIssue(7), (error) => {
+    assert.match(error.message, /user:\[redacted\]@gitlab\.example\.com/);
+    assert.doesNotMatch(error.message, /basic-secret/);
     return true;
   });
 });
