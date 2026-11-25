@@ -363,18 +363,47 @@ export class GlabClient {
   }
 
   getUpload(uploadPath) {
-    if (
-      typeof uploadPath !== "string" ||
-      !uploadPath.startsWith("/uploads/") ||
-      uploadPath.split("/").some((segment) => segment === "..")
-    ) {
+    if (typeof uploadPath !== "string" || !uploadPath) {
       throw new GlabError("Only GitLab /uploads/ paths can be proxied.", {
         code: "invalid_upload_path",
       });
     }
-    const url = new URL(uploadPath, this.baseUrl);
-    if (url.origin !== this.baseUrl || !url.pathname.startsWith("/uploads/")) {
+    const rawPath = uploadPath
+      .replace(/^https?:\/\/[^/]+/i, "")
+      .split(/[?#]/, 1)[0];
+    let decodedPath;
+    let url;
+    try {
+      decodedPath = decodeURIComponent(rawPath);
+      url = new URL(uploadPath, this.baseUrl);
+    } catch (error) {
+      throw new GlabError("Only valid GitLab upload paths can be proxied.", {
+        code: "invalid_upload_path",
+        cause: error,
+      });
+    }
+    if (
+      url.origin !== this.baseUrl ||
+      decodedPath.includes("\\") ||
+      decodedPath.split("/").some((segment) => segment === "." || segment === "..")
+    ) {
       throw new GlabError("The upload URL is outside the configured GitLab host.", {
+        code: "invalid_upload_path",
+      });
+    }
+    const encodedProjectPath = this.project
+      .split("/")
+      .map(encodeURIComponent)
+      .join("/");
+    const projectPathPrefix = `/${encodedProjectPath}/uploads/`;
+    const encodedProjectIdPrefix = `/${encodeURIComponent(this.project)}/uploads/`;
+    if (url.pathname.startsWith("/uploads/")) {
+      url.pathname = `/${encodedProjectPath}${url.pathname}`;
+    } else if (
+      !url.pathname.startsWith(projectPathPrefix) &&
+      !url.pathname.startsWith(encodedProjectIdPrefix)
+    ) {
+      throw new GlabError("Only GitLab project upload paths can be proxied.", {
         code: "invalid_upload_path",
       });
     }

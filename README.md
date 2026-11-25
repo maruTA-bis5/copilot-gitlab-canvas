@@ -15,6 +15,9 @@ and authenticated.
   approve/unapprove actions. Merging is intentionally not exposed.
 - A GitLab MCP fallback that lets the agent provide view data and execute
   requested operations through the official GitLab MCP server.
+- Optional metadata and pipeline endpoints can fail independently without
+  hiding the main issue or merge request; the canvas shows a warning when
+  supplementary data could not be loaded.
 - Japanese and English UI labels, plus automatic locale selection.
 
 ## Use

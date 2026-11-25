@@ -73,7 +73,7 @@ export function renderMergeRequestDetail(state) {
   const stateControl =
     mergeRequest.state === "merged"
       ? ""
-      : `<button type="button" class="secondary-button" data-command="set-state" data-state="${stateAction}" data-kind="merge_requests">${escapeHtml(t[stateAction] || stateAction)}</button>`;
+      : `<button type="button" class="secondary-button" data-command="set-state" data-state="${stateAction}" data-kind="merge_requests">${escapeHtml(stateAction === "closed" ? t.close || "Close" : t.reopen || "Reopen")}</button>`;
   const statusLabel = mergeRequest.status === "draft"
     ? t.draft || "Draft"
     : t[mergeRequest.status] || mergeRequest.status;

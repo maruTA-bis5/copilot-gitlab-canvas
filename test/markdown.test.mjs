@@ -24,6 +24,13 @@ test("escapes raw HTML and rejects executable URLs", () => {
   assert.doesNotMatch(html, /src="javascript:/i);
 });
 
+test("does not turn escaped apostrophes into issue references", () => {
+  const html = renderMarkdown("It's safe to read.");
+
+  assert.match(html, /It&#39;s safe to read/);
+  assert.doesNotMatch(html, /data-iid="39"/);
+});
+
 test("proxies relative GitLab uploads and renders links in MCP mode", () => {
   const direct = renderMarkdown("![diagram](/uploads/hash/diagram.png)", {
     backend: "glab",

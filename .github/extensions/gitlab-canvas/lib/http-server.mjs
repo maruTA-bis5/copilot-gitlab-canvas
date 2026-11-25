@@ -153,13 +153,14 @@ export function createCanvasHttpServer({
         sendJson(response, 401, { error: "Unauthorized." });
         return;
       }
+      const state = await getState();
       response.writeHead(200, {
         "content-type": "text/event-stream; charset=utf-8",
         "cache-control": "no-cache, no-transform",
         connection: "keep-alive",
         "x-accel-buffering": "no",
       });
-      response.write(`event: state\ndata: ${JSON.stringify(await getState())}\n\n`);
+      response.write(`event: state\ndata: ${JSON.stringify(state)}\n\n`);
       eventClients.add(response);
       response.on("close", () => eventClients.delete(response));
       return;
@@ -245,7 +246,11 @@ export function createCanvasHttpServer({
     publish(state) {
       const event = `event: state\ndata: ${JSON.stringify(state)}\n\n`;
       for (const client of eventClients) {
-        client.write(event);
+        if (client.writableEnded || client.destroyed) {
+          eventClients.delete(client);
+        } else {
+          client.write(event);
+        }
       }
     },
     async close() {
@@ -256,9 +261,11 @@ export function createCanvasHttpServer({
       if (!server.listening) {
         return;
       }
-      await new Promise((resolve, reject) => {
+      const closing = new Promise((resolve, reject) => {
         server.close((error) => (error ? reject(error) : resolve()));
       });
+      server.closeAllConnections?.();
+      await closing;
       baseUrl = null;
       boundAddress = null;
     },

@@ -88,6 +88,51 @@ test("reads upload responses as bytes rather than attempting JSON parsing", asyn
 
   assert.deepEqual(await client.getUpload("/uploads/hash/image.png"), image);
   assert.equal(calls[0].options.encoding, null);
+  assert.ok(
+    calls[0].args.includes(
+      "https://gitlab.example.com/team/repo/uploads/hash/image.png",
+    ),
+  );
+});
+
+test("keeps project-relative upload paths from duplicating the project prefix", async () => {
+  const { calls, execFileImpl } = fakeExecFile([
+    { stdout: Buffer.from("one") },
+    { stdout: Buffer.from("two") },
+  ]);
+  const client = new GlabClient({
+    host: "gitlab.example.com",
+    project: "team/subgroup/repo",
+    execFileImpl,
+  });
+
+  await client.getUpload("/uploads/hash/one.png");
+  await client.getUpload("/team/subgroup/repo/uploads/hash/two.png");
+
+  assert.ok(
+    calls[0].args.includes(
+      "https://gitlab.example.com/team/subgroup/repo/uploads/hash/one.png",
+    ),
+  );
+  assert.ok(
+    calls[1].args.includes(
+      "https://gitlab.example.com/team/subgroup/repo/uploads/hash/two.png",
+    ),
+  );
+});
+
+test("rejects encoded traversal in upload paths", async () => {
+  const { calls, execFileImpl } = fakeExecFile();
+  const client = new GlabClient({
+    host: "gitlab.example.com",
+    project: "team/repo",
+    execFileImpl,
+  });
+
+  assert.throws(() => client.getUpload("/uploads/%2e%2e/secrets"), {
+    code: "invalid_upload_path",
+  });
+  assert.equal(calls.length, 0);
 });
 
 test("does not ask GitLab for a merged state on issue endpoints", async () => {

@@ -6,24 +6,26 @@ import {
   joinSession,
 } from "@microsoft/copilot-sdk/extension";
 import {
-  normalizeDiscussions,
-  normalizeIssue,
-  normalizeMergeRequest,
-  normalizeMergeRequestDiffs,
   normalizeViewData,
 } from "./lib/data-normalizer.mjs";
 import { GlabClient } from "./lib/glab-client.mjs";
 import { createCanvasHttpServer } from "./lib/http-server.mjs";
+import { closePanelEntry, replacePanelEntry } from "./lib/panel-registry.mjs";
 import {
   getOriginRemote,
   parseGitLabItemUrl,
   resolveProject,
 } from "./lib/git-remote.mjs";
-import { getMessages, resolveLanguage } from "./lib/i18n.mjs";
+import { createPanelClientState } from "./lib/panel-state.mjs";
+import {
+  canvasViews,
+  normalizeFilters,
+  prepareNavigationState,
+} from "./lib/panel-navigation.mjs";
 import { createStateStore } from "./lib/state-store.mjs";
+import { loadViewData } from "./lib/view-loader.mjs";
 
-const views = new Set(["issue_list", "issue_detail", "mr_list", "mr_detail"]);
-const stateValues = new Set(["opened", "closed", "merged", "all"]);
+const views = new Set(canvasViews);
 const instanceMap = new Map();
 const staticRoot = fileURLToPath(new URL("./ui/", import.meta.url));
 
@@ -31,24 +33,14 @@ function canvasError(code, message) {
   return new CanvasError(code, message);
 }
 
-function normalizeFilters(filters = {}, previous = {}) {
-  const state = stateValues.has(filters.state)
-    ? filters.state
-    : stateValues.has(previous.state)
-      ? previous.state
-      : "opened";
-  return {
-    state,
-    search: String(filters.search ?? previous.search ?? ""),
-    labels: Array.isArray(filters.labels)
-      ? filters.labels.map(String).filter(Boolean)
-      : Array.isArray(previous.labels)
-        ? previous.labels
-        : [],
-    assignee: String(filters.assignee ?? previous.assignee ?? ""),
-    author: String(filters.author ?? previous.author ?? ""),
-    page: Math.max(1, Number(filters.page ?? previous.page ?? 1) || 1),
-  };
+function asCanvasError(error) {
+  if (error instanceof CanvasError) {
+    return error;
+  }
+  return canvasError(
+    error?.code ?? "gitlab_request_failed",
+    error?.message ?? String(error),
+  );
 }
 
 function panelStateForStorage(state) {
@@ -70,73 +62,17 @@ async function resolvePanelProject(input, saved) {
       project: saved.project.project,
     });
   }
-  const origin = await getOriginRemote(session.workspacePath ?? process.cwd());
+  const origin = await getOriginRemote(process.cwd());
   return resolveProject({}, origin);
-}
-
-async function loadViewData(client, state) {
-  if (state.view === "issue_list") {
-    const items = await client.listIssues(state.filters);
-    return { items: items.map(normalizeIssue) };
-  }
-  if (state.view === "mr_list") {
-    const items = await client.listMergeRequests(state.filters);
-    return { items: items.map(normalizeMergeRequest) };
-  }
-  if (!Number.isInteger(Number(state.iid)) || Number(state.iid) < 1) {
-    throw canvasError("gitlab_item_unresolved", "A positive issue or merge request IID is required.");
-  }
-  if (state.view === "issue_detail") {
-    const [issue, discussions, relatedMergeRequests, relatedIssues] = await Promise.all([
-      client.getIssue(state.iid),
-      client.getDiscussions("issues", state.iid),
-      client.getRelatedMergeRequests(state.iid),
-      client.getRelatedIssues(state.iid),
-    ]);
-    return normalizeViewData("issue_detail", {
-      issue,
-      discussions,
-      relatedMergeRequests,
-      relatedIssues,
-    });
-  }
-
-  const [mergeRequest, discussions, changes, relatedIssues, approvals] = await Promise.all([
-    client.getMergeRequest(state.iid),
-    client.getDiscussions("merge_requests", state.iid),
-    client.getMergeRequestChanges(state.iid),
-    client.getMergeRequestClosingIssues(state.iid),
-    client.getApprovals(state.iid),
-  ]);
-  const pipelineJobs = mergeRequest.head_pipeline?.id
-    ? await client.getPipelineJobs(mergeRequest.head_pipeline.id)
-    : [];
-  return normalizeViewData("mr_detail", {
-    mergeRequest: {
-      ...mergeRequest,
-      head_pipeline: mergeRequest.head_pipeline
-        ? { ...mergeRequest.head_pipeline, jobs: pipelineJobs }
-        : null,
-      approved_by: approvals?.approved_by ?? mergeRequest.approved_by,
-      approvals_before_merge:
-        approvals?.approvals_before_merge ?? mergeRequest.approvals_before_merge,
-      user_has_approved: approvals?.user_has_approved,
-    },
-    discussions: normalizeDiscussions(discussions),
-    diffs: normalizeMergeRequestDiffs(changes),
-    relatedIssues,
-  });
 }
 
 async function stateForClient(entry) {
   const preferences = await entry.store.loadPreferences();
-  const language = resolveLanguage(preferences.language);
-  return {
-    ...entry.state,
-    language,
-    languagePreference: preferences.language,
-    messages: getMessages(language),
-  };
+  return createPanelClientState(
+    entry.state,
+    entry.mode,
+    preferences.language,
+  );
 }
 
 async function persistAndPublish(entry) {
@@ -153,7 +89,9 @@ async function refreshEntry(entry) {
   if (entry.mode !== "glab" || !entry.client) {
     return requestMcpAction(entry, { type: "refresh" });
   }
-  entry.state.data = await loadViewData(entry.client, entry.state);
+  const loaded = await loadViewData(entry.client, entry.state);
+  entry.state.data = loaded.data;
+  entry.state.warnings = loaded.warnings;
   entry.state.error = null;
   entry.state.pending = false;
   await persistAndPublish(entry);
@@ -183,6 +121,7 @@ function actionPrompt(entry, action) {
 async function requestMcpAction(entry, action) {
   entry.state.pending = true;
   entry.state.error = null;
+  entry.state.warnings = [];
   await persistAndPublish(entry);
   try {
     await entry.session.send({ prompt: actionPrompt(entry, action) });
@@ -196,31 +135,33 @@ async function requestMcpAction(entry, action) {
 }
 
 async function navigateEntry(entry, input) {
-  if (input.view && !views.has(input.view)) {
-    throw canvasError("canvas_input_invalid", "The requested GitLab Canvas view is invalid.");
+  const canLoadDirectly = entry.mode === "glab" && entry.client;
+  const nextState = await prepareNavigationState(
+    entry.state,
+    input,
+    canLoadDirectly
+      ? (state) => loadViewData(entry.client, state)
+      : undefined,
+  );
+  if (canLoadDirectly) {
+    entry.state = nextState;
+    await persistAndPublish(entry);
+    return { refreshed: true };
   }
-  if (input.view) {
-    entry.state.view = input.view;
+  const previousState = entry.state;
+  entry.state = nextState;
+  try {
+    return await requestMcpAction(entry, {
+      type: "navigate",
+      view: entry.state.view,
+      iid: entry.state.iid,
+      filters: entry.state.filters,
+    });
+  } catch (error) {
+    entry.state = previousState;
+    await persistAndPublish(entry);
+    throw error;
   }
-  if (input.iid !== undefined) {
-    entry.state.iid = Number(input.iid);
-  } else if (entry.state.view.endsWith("_list")) {
-    entry.state.iid = null;
-  }
-  entry.state.filters = normalizeFilters(input.filters ?? {}, entry.state.filters);
-  entry.state.data = null;
-  entry.state.error = null;
-  entry.state.pending = false;
-
-  if (entry.mode === "glab") {
-    return refreshEntry(entry);
-  }
-  return requestMcpAction(entry, {
-    type: "navigate",
-    view: entry.state.view,
-    iid: entry.state.iid,
-    filters: entry.state.filters,
-  });
 }
 
 async function chatWithItem(entry, intent) {
@@ -381,7 +322,7 @@ function getInstance(instanceId) {
   return entry;
 }
 
-async function openCanvas(ctx) {
+async function openCanvasInternal(ctx) {
   const input = ctx.input ?? {};
   const store = createStateStore({ workspacePath: session.workspacePath });
   const saved = await store.loadPanelState(ctx.instanceId);
@@ -412,7 +353,7 @@ async function openCanvas(ctx) {
       host: project.host,
       project: project.project,
       baseUrl: project.baseUrl,
-      cwd: session.workspacePath ?? process.cwd(),
+      cwd: process.cwd(),
     }),
     mode: "mcp",
     state: {
@@ -423,13 +364,16 @@ async function openCanvas(ctx) {
       data: null,
       error: null,
       pending: false,
+      warnings: [],
     },
     server: null,
   };
   const availability = await entry.client.checkAvailability();
   if (availability.available) {
     entry.mode = "glab";
-    entry.state.data = await loadViewData(entry.client, entry.state);
+    const loaded = await loadViewData(entry.client, entry.state);
+    entry.state.data = loaded.data;
+    entry.state.warnings = loaded.warnings;
   } else if (input.data !== undefined) {
     entry.state.data = normalizeViewData(view, input.data);
   } else {
@@ -470,12 +414,17 @@ async function openCanvas(ctx) {
     },
   });
   const { url } = await entry.server.start();
-  instanceMap.set(ctx.instanceId, entry);
+  let registered = false;
   try {
+    await replacePanelEntry(instanceMap, ctx.instanceId, entry);
+    registered = true;
     await persistAndPublish(entry);
   } catch (error) {
-    instanceMap.delete(ctx.instanceId);
-    await entry.server.close();
+    if (registered) {
+      await closePanelEntry(instanceMap, ctx.instanceId, entry);
+    } else {
+      await entry.server.close();
+    }
     throw error;
   }
 
@@ -486,7 +435,15 @@ async function openCanvas(ctx) {
   };
 }
 
-async function handleCanvasAction(ctx) {
+async function openCanvas(ctx) {
+  try {
+    return await openCanvasInternal(ctx);
+  } catch (error) {
+    throw asCanvasError(error);
+  }
+}
+
+async function handleCanvasActionInternal(ctx) {
   const entry = getInstance(ctx.instanceId);
   switch (ctx.actionName) {
     case "get_state":
@@ -529,11 +486,20 @@ async function handleCanvasAction(ctx) {
       entry.state.data = normalizeViewData(entry.state.view, input.data ?? {});
       entry.state.pending = false;
       entry.state.error = null;
+      entry.state.warnings = [];
       await persistAndPublish(entry);
       return { updated: true, view: entry.state.view };
     }
     default:
       throw canvasError("canvas_action_not_found", `Unknown canvas action: ${ctx.actionName}`);
+  }
+}
+
+async function handleCanvasAction(ctx) {
+  try {
+    return await handleCanvasActionInternal(ctx);
+  } catch (error) {
+    throw asCanvasError(error);
   }
 }
 
@@ -638,12 +604,7 @@ const canvas = createCanvas({
   ],
   open: openCanvas,
   onClose: async (ctx) => {
-    const entry = instanceMap.get(ctx.instanceId);
-    if (!entry) {
-      return;
-    }
-    instanceMap.delete(ctx.instanceId);
-    await entry.server.close();
+    await closePanelEntry(instanceMap, ctx.instanceId);
   },
 });
 

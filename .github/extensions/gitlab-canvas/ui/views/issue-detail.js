@@ -32,7 +32,7 @@ export function renderIssueDetail(state) {
       <a class="secondary-button" href="${escapeHtml(safeExternalUrl(issue.webUrl))}" target="_blank" rel="noopener noreferrer">${escapeHtml(t.openInGitLab || "Open in GitLab")}</a>
     </div>
     <div class="detail-actions">
-      <button type="button" class="secondary-button" data-command="set-state" data-state="${statusAction}">${escapeHtml(t[statusAction] || statusAction)}</button>
+      <button type="button" class="secondary-button" data-command="set-state" data-state="${statusAction}">${escapeHtml(statusAction === "closed" ? t.close || "Close" : t.reopen || "Reopen")}</button>
       <button type="button" class="secondary-button" data-command="chat" data-intent="investigate">${escapeHtml(t.investigate || "Investigate this item")}</button>
       <button type="button" class="secondary-button" data-command="chat" data-intent="plan">${escapeHtml(t.plan || "Create an implementation plan")}</button>
     </div>

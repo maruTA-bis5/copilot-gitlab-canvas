@@ -140,6 +140,63 @@ test("normalizes discussion threads including inline diff positions", () => {
   );
 });
 
+test("derives discussion resolution state from resolvable notes", () => {
+  assert.deepEqual(
+    normalizeDiscussions([
+      {
+        id: "resolved-thread",
+        notes: [
+          { id: 1, body: "Resolved", resolvable: true, resolved: true },
+          { id: 2, body: "Reply", resolvable: false, resolved: false },
+        ],
+      },
+      {
+        id: "open-thread",
+        notes: [{ id: 3, body: "Open", resolvable: true, resolved: false }],
+      },
+    ]),
+    [
+      {
+        id: "resolved-thread",
+        resolvable: true,
+        resolved: true,
+        individualNote: false,
+        notes: [
+          {
+            id: 1,
+            body: "Resolved",
+            author: null,
+            createdAt: "",
+            position: null,
+          },
+          {
+            id: 2,
+            body: "Reply",
+            author: null,
+            createdAt: "",
+            position: null,
+          },
+        ],
+      },
+      {
+        id: "open-thread",
+        resolvable: true,
+        resolved: false,
+        individualNote: false,
+        notes: [
+          {
+            id: 3,
+            body: "Open",
+            author: null,
+            createdAt: "",
+            position: null,
+          },
+        ],
+      },
+    ],
+  );
+});
+
 test("normalizes diff metadata without dropping patch text", () => {
   assert.deepEqual(
     normalizeMergeRequestDiffs([

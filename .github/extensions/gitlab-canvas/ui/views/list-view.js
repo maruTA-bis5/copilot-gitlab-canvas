@@ -5,7 +5,11 @@ const stateOptions = ["opened", "closed", "merged", "all"];
 function renderFilters(state) {
   const filters = state.filters ?? {};
   const t = state.messages ?? {};
-  const options = stateOptions
+  const availableStates =
+    state.view === "issue_list"
+      ? stateOptions.filter((value) => value !== "merged")
+      : stateOptions;
+  const options = availableStates
     .map(
       (value) =>
         `<option value="${value}"${(filters.state ?? "opened") === value ? " selected" : ""}>${escapeHtml(t[value] || value)}</option>`,

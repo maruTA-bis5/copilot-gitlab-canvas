@@ -143,19 +143,30 @@ export function normalizeDiscussions(values) {
   if (!Array.isArray(values)) {
     return [];
   }
-  return values.map((discussion) => ({
-    id: text(discussion.id),
-    resolvable: Boolean(discussion.resolvable),
-    resolved: Boolean(discussion.resolved),
-    individualNote: Boolean(discussion.individual_note ?? discussion.individualNote),
-    notes: (Array.isArray(discussion.notes) ? discussion.notes : []).map((note) => ({
-      id: note.id == null ? null : number(note.id),
-      body: text(note.body),
-      author: normalizeUser(note.author),
-      createdAt: text(note.created_at ?? note.createdAt),
-      position: normalizePosition(note.position),
-    })),
-  }));
+  return values.map((discussion) => {
+    const sourceNotes = Array.isArray(discussion.notes) ? discussion.notes : [];
+    const resolvable =
+      discussion.resolvable ?? sourceNotes.some((note) => note.resolvable);
+    const resolved =
+      discussion.resolved ??
+      (resolvable &&
+        sourceNotes
+          .filter((note) => note.resolvable)
+          .every((note) => note.resolved));
+    return {
+      id: text(discussion.id),
+      resolvable: Boolean(resolvable),
+      resolved: Boolean(resolved),
+      individualNote: Boolean(discussion.individual_note ?? discussion.individualNote),
+      notes: sourceNotes.map((note) => ({
+        id: note.id == null ? null : number(note.id),
+        body: text(note.body),
+        author: normalizeUser(note.author),
+        createdAt: text(note.created_at ?? note.createdAt),
+        position: normalizePosition(note.position),
+      })),
+    };
+  });
 }
 
 export function normalizeMergeRequestDiffs(values) {

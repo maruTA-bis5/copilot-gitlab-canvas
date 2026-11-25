@@ -1,4 +1,6 @@
 import { renderMarkdown } from "./markdown.js";
+import { createDiffCommentPosition } from "./diff-viewer.js";
+import { backendLabel } from "./views/common.js";
 import { renderIssueDetail } from "./views/issue-detail.js";
 import { renderListView } from "./views/list-view.js";
 import { renderMergeRequestDetail } from "./views/mr-detail.js";
@@ -8,6 +10,8 @@ const token = window.location.hash.slice(1);
 let state = null;
 let eventStreamOpen = true;
 let activeTab = "overview";
+const eventStreamController = new AbortController();
+const blobUrls = new Set();
 
 const escapeHtml = (value) =>
   String(value ?? "").replace(/[&<>"']/g, (character) => {
@@ -29,7 +33,7 @@ function renderHeader() {
   const isIssues = state.view.startsWith("issue");
   const projectPath = state.project?.project || state.project?.path || "";
   const lang = state.languagePreference || "auto";
-  const mode = state.mode === "glab" ? "glab" : "MCP";
+  const mode = backendLabel(state.mode);
   return `<header class="app-header">
     <div class="brand"><span class="brand-mark" aria-hidden="true">G</span><span class="project-path">${escapeHtml(projectPath)}</span></div>
     <nav class="header-nav" aria-label="GitLab sections">
@@ -65,6 +69,10 @@ function renderBody() {
 }
 
 function render() {
+  for (const blobUrl of blobUrls) {
+    URL.revokeObjectURL(blobUrl);
+  }
+  blobUrls.clear();
   if (!state) {
     app.innerHTML = `<p class="loading">${escapeHtml(message("loading", "Loading…"))}</p>`;
     return;
@@ -75,6 +83,7 @@ function render() {
     <main class="canvas-content">
       ${state.error ? `<div class="error-banner" role="alert">${escapeHtml(state.error)}</div>` : ""}
       ${state.pending ? `<div class="info-banner" role="status">${escapeHtml(message("mcpPending", "Waiting for GitLab MCP data from the agent."))}</div>` : ""}
+      ${(state.warnings ?? []).map((warning) => `<div class="info-banner warning-banner" role="status">${escapeHtml(warning)}</div>`).join("")}
       ${renderBody()}
     </main>
   </div>`;
@@ -127,7 +136,9 @@ async function loadUploadImages() {
         throw new Error(`Image request failed with status ${response.status}.`);
       }
       const blob = await response.blob();
-      image.src = URL.createObjectURL(blob);
+      const blobUrl = URL.createObjectURL(blob);
+      blobUrls.add(blobUrl);
+      image.src = blobUrl;
       image.dataset.loaded = "true";
     } catch {
       image.alt = image.alt ? `${image.alt} (unavailable)` : "Image unavailable";
@@ -164,7 +175,8 @@ function openDiffComment(button) {
   const form = document.createElement("form");
   form.className = "inline-comment-form";
   form.dataset.form = "diff-comment";
-  form.dataset.path = button.dataset.path || "";
+  form.dataset.oldPath = button.dataset.oldPath || "";
+  form.dataset.newPath = button.dataset.newPath || "";
   form.dataset.newLine = button.dataset.newLine || "";
   form.dataset.oldLine = button.dataset.oldLine || "";
   form.dataset.baseSha = button.dataset.baseSha || "";
@@ -243,16 +255,7 @@ async function submitForm(form) {
       type: "diff_comment",
       iid: currentIid(),
       body: values.get("body"),
-      position: {
-        position_type: "text",
-        new_path: form.dataset.path,
-        old_path: form.dataset.path,
-        new_line: form.dataset.newLine ? Number(form.dataset.newLine) : null,
-        old_line: form.dataset.oldLine ? Number(form.dataset.oldLine) : null,
-        base_sha: form.dataset.baseSha,
-        head_sha: form.dataset.headSha,
-        start_sha: form.dataset.startSha,
-      },
+      position: createDiffCommentPosition(form.dataset),
     });
   }
   form.reset();
@@ -384,6 +387,7 @@ async function listenForUpdates() {
     try {
       const response = await fetch("/events", {
         headers: { "x-gitlab-canvas-token": token },
+        signal: eventStreamController.signal,
       });
       if (!response.ok || !response.body) {
         throw new Error(`Event stream failed with status ${response.status}.`);
@@ -422,6 +426,7 @@ async function listenForUpdates() {
 
 window.addEventListener("pagehide", () => {
   eventStreamOpen = false;
+  eventStreamController.abort();
 });
 
 await receiveState();

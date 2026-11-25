@@ -106,6 +106,13 @@ function renderInline(value, options = {}, nested = false) {
   text = text.replace(/`([^`]+)`/g, (_, code) =>
     keep(`<code>${escapeHtml(code)}</code>`),
   );
+  if (!nested) {
+    text = text.replace(
+      /(^|[^\w/&"'`])(#|!)(\d+)\b/g,
+      (_, prefix, marker, iid) =>
+        `${prefix}${keep(`<a href="#" data-reference-kind="${marker === "#" ? "issue" : "merge_request"}" data-iid="${iid}">${marker}${iid}</a>`)}`,
+    );
+  }
   text = escapeHtml(text);
   text = text.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
   text = text.replace(/__([^_]+)__/g, "<strong>$1</strong>");
@@ -113,13 +120,6 @@ function renderInline(value, options = {}, nested = false) {
   text = text.replace(/(^|[^\w/"'`])\*([^*\n]+)\*(?!\*)/g, "$1<em>$2</em>");
   text = text.replace(/(^|[^\w/"'`])_([^_\n]+)_(?!\w)/g, "$1<em>$2</em>");
 
-  if (!nested) {
-    text = text.replace(
-      /(^|[^\w/"'`])(#|!)(\d+)\b/g,
-      (_, prefix, marker, iid) =>
-        `${prefix}<a href="#" data-reference-kind="${marker === "#" ? "issue" : "merge_request"}" data-iid="${iid}">${marker}${iid}</a>`,
-    );
-  }
   return text.replace(/\u0000(\d+)\u0000/g, (_, index) => tokens[Number(index)]);
 }
 

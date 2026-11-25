@@ -1,5 +1,18 @@
 import { escapeHtml, renderDiscussionThread } from "./views/common.js";
 
+export function createDiffCommentPosition(dataset) {
+  return {
+    position_type: "text",
+    new_path: dataset.newPath ?? "",
+    old_path: dataset.oldPath ?? "",
+    new_line: dataset.newLine ? Number(dataset.newLine) : null,
+    old_line: dataset.oldLine ? Number(dataset.oldLine) : null,
+    base_sha: dataset.baseSha ?? "",
+    head_sha: dataset.headSha ?? "",
+    start_sha: dataset.startSha ?? "",
+  };
+}
+
 function notePosition(discussion) {
   return discussion.notes?.find((note) => note.position)?.position ?? null;
 }
@@ -31,7 +44,11 @@ function parsePatch(diff) {
   const rows = [];
   let oldLine = null;
   let newLine = null;
-  for (const line of String(diff ?? "").split(/\r?\n/)) {
+  const patch = String(diff ?? "").replace(/\r?\n$/, "");
+  if (!patch) {
+    return rows;
+  }
+  for (const line of patch.split(/\r?\n/)) {
     const hunk = line.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
     if (hunk) {
       oldLine = Number(hunk[1]);
@@ -67,8 +84,7 @@ function parsePatch(diff) {
   return rows;
 }
 
-function renderPatch(file, discussions, state) {
-  const rows = parsePatch(file.diff);
+function renderPatch(file, discussions, state, rows) {
   if (!rows.length) {
     return `<p class="muted">Diff content is unavailable for this file.</p>`;
   }
@@ -77,12 +93,11 @@ function renderPatch(file, discussions, state) {
       if (row.type === "hunk" || row.type === "meta") {
         return `<tr class="diff-${row.type}"><td colspan="4">${escapeHtml(row.text)}</td></tr>`;
       }
-      const path = file.newPath || file.oldPath;
       const diffRefs = state.data?.mergeRequest?.diffRefs ?? {};
       return `<tr class="diff-${row.type}">
         <td class="line-number">${row.oldLine ?? ""}</td><td class="line-number">${row.newLine ?? ""}</td>
         <td class="diff-content"><code>${escapeHtml(row.text)}</code></td>
-        <td class="diff-comment"><button type="button" title="Add review comment" aria-label="Add review comment" data-diff-comment data-path="${escapeHtml(path)}" data-new-line="${row.newLine ?? ""}" data-old-line="${row.oldLine ?? ""}" data-base-sha="${escapeHtml(diffRefs.baseSha)}" data-head-sha="${escapeHtml(diffRefs.headSha)}" data-start-sha="${escapeHtml(diffRefs.startSha)}">+</button></td>
+        <td class="diff-comment"><button type="button" title="Add review comment" aria-label="Add review comment" data-diff-comment data-old-path="${escapeHtml(file.oldPath)}" data-new-path="${escapeHtml(file.newPath)}" data-new-line="${row.newLine ?? ""}" data-old-line="${row.oldLine ?? ""}" data-base-sha="${escapeHtml(diffRefs.baseSha)}" data-head-sha="${escapeHtml(diffRefs.headSha)}" data-start-sha="${escapeHtml(diffRefs.startSha)}">+</button></td>
       </tr>${renderInlineThreads(discussions, file, row, state)}`;
     })
     .join("")}</tbody></table></div>`;
@@ -95,11 +110,12 @@ export function renderDiffFiles(diffs, discussions = [], state = {}) {
   return `<div class="diff-files">${diffs
     .map((file, index) => {
       const path = file.newPath || file.oldPath;
-      const additions = (file.diff.match(/^\+(?!\+\+).*/gm) ?? []).length;
-      const deletions = (file.diff.match(/^-(?!--).*/gm) ?? []).length;
+      const rows = parsePatch(file.diff);
+      const additions = rows.filter((row) => row.type === "added").length;
+      const deletions = rows.filter((row) => row.type === "removed").length;
       return `<details class="diff-file" open>
         <summary><span>${escapeHtml(path)}</span><span class="diff-count"><span class="added-count">+${additions}</span> <span class="removed-count">−${deletions}</span></span></summary>
-        ${renderPatch(file, discussions, state)}
+        ${renderPatch(file, discussions, state, rows)}
       </details>`;
     })
     .join("")}</div>`;

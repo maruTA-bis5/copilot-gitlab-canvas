@@ -11,6 +11,10 @@ const messages = {
   noDiscussions: "No discussions",
   noResults: "No results",
   comments: "Comments",
+  close: "Close",
+  reopen: "Reopen",
+  opened: "Opened",
+  closed: "Closed",
 };
 
 test("escapes untrusted issue titles and labels in the list view", () => {
@@ -69,6 +73,80 @@ test("restricts item links to HTTP(S) and escapes detail content", () => {
   assert.match(html, /href="#"/);
   assert.doesNotMatch(html, /<script>/i);
   assert.match(html, /&lt;script&gt;/i);
+});
+
+test("uses Close and Reopen action labels for issues and merge requests", () => {
+  const issue = {
+    iid: 3,
+    title: "Issue",
+    state: "opened",
+    webUrl: "https://gitlab.test/team/repo/-/issues/3",
+    author: { name: "Reporter" },
+    createdAt: "",
+    description: "",
+    assignees: [],
+    labels: [],
+    milestone: "",
+  };
+  const issueView = (state) =>
+    renderIssueDetail({
+      view: "issue_detail",
+      mode: "mcp",
+      project: { projectUrl: "https://gitlab.test/team/repo" },
+      messages,
+      data: {
+        issue: { ...issue, state },
+        discussions: [],
+        relatedMergeRequests: [],
+        relatedIssues: [],
+      },
+    });
+  assert.match(issueView("opened"), /data-state="closed">Close<\/button>/);
+  assert.match(issueView("closed"), /data-state="opened">Reopen<\/button>/);
+
+  const mergeRequest = {
+    iid: 8,
+    title: "MR",
+    status: "opened",
+    webUrl: "https://gitlab.test/team/repo/-/merge_requests/8",
+    author: { name: "Reviewer" },
+    createdAt: "",
+    sourceBranch: "feature",
+    targetBranch: "main",
+    state: "opened",
+    description: "",
+    approvals: { required: 1, approved: 0 },
+    pipeline: null,
+    assignees: [],
+    labels: [],
+  };
+  const mrView = (state) =>
+    renderMergeRequestDetail({
+      view: "mr_detail",
+      mode: "mcp",
+      project: { projectUrl: "https://gitlab.test/team/repo" },
+      messages,
+      data: {
+        mergeRequest: { ...mergeRequest, state, status: state },
+        discussions: [],
+        diffs: [],
+        relatedIssues: [],
+      },
+    });
+  assert.match(mrView("opened"), /data-state="closed"[^>]*>Close<\/button>/);
+  assert.match(mrView("closed"), /data-state="opened"[^>]*>Reopen<\/button>/);
+});
+
+test("omits merged from the issue filter but retains it for merge requests", () => {
+  const render = (view) =>
+    renderListView({
+      view,
+      filters: { state: "opened", labels: [], page: 1 },
+      messages,
+      data: { items: [] },
+    });
+  assert.doesNotMatch(render("issue_list"), /<option value="merged"/);
+  assert.match(render("mr_list"), /<option value="merged"/);
 });
 
 test("renders MR pipeline jobs and safely escaped unified diff lines", () => {

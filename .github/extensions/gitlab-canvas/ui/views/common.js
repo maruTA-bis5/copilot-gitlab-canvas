@@ -1,5 +1,9 @@
 import { renderMarkdown } from "../markdown.js";
 
+export function backendLabel(mode) {
+  return mode === "glab" ? "glab" : "MCP";
+}
+
 export function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (character) => {
     const entities = {
