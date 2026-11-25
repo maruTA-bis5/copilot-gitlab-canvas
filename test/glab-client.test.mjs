@@ -41,6 +41,56 @@ test("uses execFile and URL-encodes nested project paths and list filters", asyn
   assert.ok(calls[0].args.some((arg) => arg.includes("labels=bug%2Cneeds+triage")));
 });
 
+test("requests detailed labels for lists and individual items", async () => {
+  const { calls, execFileImpl } = fakeExecFile(
+    Array.from({ length: 5 }, () => ({ stdout: "[]" })),
+  );
+  const client = new GlabClient({
+    host: "gitlab.example.com",
+    project: "team/repo",
+    execFileImpl,
+  });
+
+  await client.listIssues();
+  await client.listMergeRequests();
+  await client.getIssue(1);
+  await client.getMergeRequest(2);
+  await client.getProjectLabels();
+
+  const targets = calls.map(({ args }) => args.at(-1));
+  assert.match(targets[0], /\/issues\?.*with_labels_details=true/);
+  assert.match(targets[1], /\/merge_requests\?.*with_labels_details=true/);
+  assert.match(targets[2], /\/issues\/1\?with_labels_details=true/);
+  assert.match(targets[3], /\/merge_requests\/2\?with_labels_details=true/);
+  assert.match(targets[4], /\/labels\?per_page=100&page=1/);
+});
+
+test("updates labels by name when GitLab returns label detail objects", async () => {
+  const { calls, execFileImpl } = fakeExecFile([
+    {
+      stdout: JSON.stringify({
+        labels: [
+          { name: "bug", color: "#d73a4a", text_color: "#ffffff" },
+          { name: "docs", color: "#0075ca", text_color: "#ffffff" },
+        ],
+      }),
+    },
+    { stdout: "{}" },
+  ]);
+  const client = new GlabClient({
+    host: "gitlab.example.com",
+    project: "team/repo",
+    execFileImpl,
+  });
+
+  await client.updateLabels("issues", 7, {
+    add: ["triage"],
+    remove: ["bug"],
+  });
+
+  assert.ok(calls[1].args.includes("labels=docs,triage"));
+});
+
 test("falls back to configured GLAB_PATH and GLAB_BIN after PATH lookup fails", async () => {
   for (const variable of ["GLAB_PATH", "GLAB_BIN"]) {
     const calls = [];

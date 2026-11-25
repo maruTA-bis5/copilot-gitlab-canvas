@@ -50,6 +50,9 @@ test("serves authenticated state and dispatches authenticated actions", async ()
     assert.doesNotMatch(await rootResponse.text(), /panel-secret/);
     const sharedModule = await fetch(new URL("views/common.js", url));
     assert.equal(sharedModule.status, 200);
+    const headerModule = await fetch(new URL("views/header.js", url));
+    assert.equal(headerModule.status, 200);
+    assert.match(await headerModule.text(), /renderHeader/);
 
     const actionResponse = await fetch(new URL("api/action", url), {
       method: "POST",

@@ -23,6 +23,57 @@ function normalizeUsers(values, fallback) {
   return list.map(normalizeUser).filter(Boolean);
 }
 
+function labelDetailsEntries(value) {
+  if (Array.isArray(value)) {
+    return value;
+  }
+  if (value && typeof value === "object") {
+    return Object.entries(value).map(([name, details]) => ({
+      ...(details && typeof details === "object" ? details : { color: details }),
+      name,
+    }));
+  }
+  return [];
+}
+
+function normalizeLabels(values, details) {
+  const detailsByName = new Map();
+  for (const entry of labelDetailsEntries(details)) {
+    if (!entry || typeof entry !== "object" || entry.name == null) {
+      continue;
+    }
+    const name = text(entry.name);
+    const existing = detailsByName.get(name) ?? {};
+    detailsByName.set(name, {
+      ...existing,
+      ...entry,
+      name,
+      color: text(entry.color) || text(existing.color),
+      text_color:
+        text(entry.text_color ?? entry.textColor) ||
+        text(existing.text_color ?? existing.textColor),
+    });
+  }
+  return (Array.isArray(values) ? values : [])
+    .map((label) => {
+      const labelObject =
+        label && typeof label === "object" && !Array.isArray(label) ? label : null;
+      const name = typeof label === "string" ? label : text(labelObject?.name);
+      if (!name) {
+        return null;
+      }
+      const detailsForLabel = detailsByName.get(name) ?? {};
+      return {
+        name,
+        color: text(labelObject?.color) || text(detailsForLabel.color),
+        textColor:
+          text(labelObject?.text_color ?? labelObject?.textColor) ||
+          text(detailsForLabel.text_color ?? detailsForLabel.textColor),
+      };
+    })
+    .filter(Boolean);
+}
+
 function normalizePipeline(value) {
   if (!value || typeof value !== "object") {
     return null;
@@ -72,7 +123,10 @@ export function normalizeIssue(value = {}) {
     webUrl: text(value.web_url ?? value.webUrl),
     author: normalizeUser(value.author),
     assignees: normalizeUsers(value.assignees, value.assignee),
-    labels: Array.isArray(value.labels) ? value.labels.map(String) : [],
+    labels: normalizeLabels(
+      value.labels,
+      value.label_details ?? value.labelDetails,
+    ),
     comments: number(value.user_notes_count ?? value.comments),
     milestone:
       typeof value.milestone === "string"
@@ -114,7 +168,10 @@ export function normalizeMergeRequest(value = {}) {
     webUrl: text(value.web_url ?? value.webUrl),
     author: normalizeUser(value.author),
     assignees: normalizeUsers(value.assignees, value.assignee),
-    labels: Array.isArray(value.labels) ? value.labels.map(String) : [],
+    labels: normalizeLabels(
+      value.labels,
+      value.label_details ?? value.labelDetails,
+    ),
     comments: number(value.user_notes_count ?? value.comments),
     createdAt: text(value.created_at ?? value.createdAt),
     updatedAt: text(value.updated_at ?? value.updatedAt),
@@ -153,14 +210,18 @@ export function normalizeDiscussions(values) {
         sourceNotes
           .filter((note) => note.resolvable)
           .every((note) => note.resolved));
+    const system =
+      sourceNotes.length > 0 && sourceNotes.every((note) => Boolean(note.system));
     return {
       id: text(discussion.id),
       resolvable: Boolean(resolvable),
       resolved: Boolean(resolved),
       individualNote: Boolean(discussion.individual_note ?? discussion.individualNote),
+      system,
       notes: sourceNotes.map((note) => ({
         id: note.id == null ? null : number(note.id),
         body: text(note.body),
+        system: Boolean(note.system),
         author: normalizeUser(note.author),
         createdAt: text(note.created_at ?? note.createdAt),
         position: normalizePosition(note.position),

@@ -1,9 +1,20 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { renderDiffFiles } from "../.github/extensions/gitlab-canvas/ui/diff-viewer.js";
 import { renderIssueDetail } from "../.github/extensions/gitlab-canvas/ui/views/issue-detail.js";
+import {
+  renderDiscussionThread,
+  renderLabels,
+} from "../.github/extensions/gitlab-canvas/ui/views/common.js";
+import { renderHeader } from "../.github/extensions/gitlab-canvas/ui/views/header.js";
 import { renderListView } from "../.github/extensions/gitlab-canvas/ui/views/list-view.js";
 import { renderMergeRequestDetail } from "../.github/extensions/gitlab-canvas/ui/views/mr-detail.js";
+
+const stylesheet = readFileSync(
+  new URL("../.github/extensions/gitlab-canvas/ui/styles.css", import.meta.url),
+  "utf8",
+);
 
 const messages = {
   openInGitLab: "Open in GitLab",
@@ -199,4 +210,151 @@ test("renders MR pipeline jobs and safely escaped unified diff lines", () => {
   assert.match(diff, /&lt;script&gt;/i);
   assert.match(changes, /data-diff-comment/);
   assert.match(diff, /data-base-sha="base"/);
+});
+
+test("renders the GitLab icon and issue title in the header", () => {
+  const html = renderHeader({
+    view: "issue_detail",
+    iid: 42,
+    project: {
+      path: "team/repo",
+      projectUrl: "https://gitlab.test/team/repo",
+    },
+    data: { issue: { iid: 42, title: "Improve & verify labels" } },
+    messages: { issues: "Issues", mergeRequests: "Merge requests" },
+  });
+
+  assert.match(html, /<svg class="gitlab-icon"[^>]*aria-hidden="true"/);
+  assert.match(html, /<span class="header-title">#42 Improve &amp; verify labels<\/span>/);
+  assert.match(html, /title="[^"]*team\/repo/);
+  assert.doesNotMatch(html, /<span class="header-title">team\/repo<\/span>/);
+
+  const mrHtml = renderHeader({
+    view: "mr_detail",
+    iid: 8,
+    project: { path: "team/repo" },
+    data: { mergeRequest: { iid: 8, title: "Update API contract" } },
+    messages: { issues: "Issues", mergeRequests: "Merge requests" },
+  });
+  assert.match(
+    mrHtml,
+    /<span class="header-title">!8 Update API contract<\/span>/,
+  );
+});
+
+test("uses localized list names instead of the project path in the header", () => {
+  const html = renderHeader({
+    view: "mr_list",
+    project: {
+      path: "team/repo",
+      projectUrl: "https://gitlab.test/team/repo",
+    },
+    messages: { mergeRequests: "Merge requests" },
+  });
+
+  assert.match(html, /<span class="header-title">Merge requests<\/span>/);
+  assert.doesNotMatch(html, /<span class="header-title">team\/repo<\/span>/);
+
+  const unsafe = renderHeader({
+    view: "issue_list",
+    project: { projectUrl: "javascript:alert(1)" },
+    messages: { issues: "Issues" },
+  });
+  assert.doesNotMatch(unsafe, /href="javascript:/i);
+  assert.match(unsafe, /href="#"/);
+});
+
+test("keeps header controls on one line while allowing the header to wrap", () => {
+  assert.match(stylesheet, /\.app-header\s*\{[^}]*flex-wrap:\s*wrap/s);
+  assert.match(
+    stylesheet,
+    /\.header-nav button,\s*\.header-actions > \*,\s*\.mode-indicator,\s*\.language-select\s*\{[^}]*flex-shrink:\s*0;[^}]*white-space:\s*nowrap/s,
+  );
+  assert.match(stylesheet, /\.header-title\s*\{[^}]*min-width:\s*0/);
+  assert.match(stylesheet, /\.header-title\s*\{[^}]*text-overflow:\s*ellipsis/);
+});
+
+test("renders safe label colors with a contrasting text color", () => {
+  const html = renderLabels([
+    { name: "light", color: "#ffffff" },
+    { name: "dark", color: "#000000" },
+    { name: "explicit", color: "#123456", textColor: "#abcdef" },
+    { name: "fallback-text", color: "#ffffff", textColor: "red;display:none" },
+    { name: "plain" },
+    { name: "unsafe", color: '";background:url(javascript:alert(1))' },
+  ]);
+
+  assert.match(
+    html,
+    /style="background-color:#ffffff;color:#1f2328"/,
+  );
+  assert.match(
+    html,
+    /style="background-color:#000000;color:#ffffff"/,
+  );
+  assert.match(
+    html,
+    /style="background-color:#123456;color:#abcdef"/,
+  );
+  assert.equal(
+    html.match(/style="background-color:#ffffff;color:#1f2328"/g)?.length,
+    2,
+  );
+  assert.doesNotMatch(html, /javascript:/i);
+  assert.doesNotMatch(html, /red;display:none/);
+});
+
+test("does not render replies or resolve controls for system discussions", () => {
+  const state = {
+    mode: "mcp",
+    project: { projectUrl: "https://gitlab.test/team/repo" },
+    messages: { resolve: "Resolve", reply: "Reply" },
+  };
+  const systemHtml = renderDiscussionThread(
+    {
+      id: "system-thread",
+      system: true,
+      resolvable: true,
+      resolved: false,
+      notes: [
+        {
+          system: true,
+          body: "assigned to reviewer",
+          author: { name: "GitLab" },
+          createdAt: "2026-02-01T10:00:00Z",
+        },
+      ],
+    },
+    state,
+    { allowResolve: true },
+  );
+  const userHtml = renderDiscussionThread(
+    {
+      id: "user-thread",
+      system: false,
+      resolvable: true,
+      resolved: false,
+      notes: [{ system: false, body: "Please review this change" }],
+    },
+    state,
+    { allowResolve: true },
+  );
+
+  assert.match(systemHtml, /discussion-thread is-system/);
+  assert.doesNotMatch(systemHtml, /data-form="reply"/);
+  assert.doesNotMatch(systemHtml, /data-command="resolve"/);
+  assert.match(userHtml, /data-form="reply"/);
+  assert.match(userHtml, /data-command="resolve"/);
+});
+
+test("uses only theme-contract colors and adaptive surfaces in dark mode", () => {
+  assert.doesNotMatch(
+    stylesheet,
+    /--(?:background-color-secondary|background-color-danger|background-color-success|color-accent-emphasis|text-color-link)\b/,
+  );
+  assert.doesNotMatch(stylesheet, /#(?:f6f8fa|ffebe9|dafbe1)\b/i);
+  assert.match(stylesheet, /color-mix\(\s*in srgb/);
+  assert.match(stylesheet, /:root\[data-color-mode="dark"\]/);
+  assert.match(stylesheet, /body\[data-color-mode="dark"\]/);
+  assert.match(stylesheet, /@media \(prefers-color-scheme: dark\)/);
 });

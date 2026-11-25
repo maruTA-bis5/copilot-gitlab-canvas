@@ -18,6 +18,9 @@ test("normalizes issue fields and tolerates missing optional values", () => {
       author: { id: 1, username: "ada", name: "Ada Lovelace" },
       assignees: [{ id: 2, username: "grace", name: "Grace Hopper" }],
       labels: ["bug"],
+      label_details: [
+        { name: "bug", color: "#d73a4a", text_color: "#ffffff" },
+      ],
       user_notes_count: 3,
       milestone: { title: "M1" },
       created_at: "2026-01-02T03:04:05Z",
@@ -32,7 +35,7 @@ test("normalizes issue fields and tolerates missing optional values", () => {
       webUrl: "https://gitlab.test/team/app/-/issues/12",
       author: { id: 1, username: "ada", name: "Ada Lovelace" },
       assignees: [{ id: 2, username: "grace", name: "Grace Hopper" }],
-      labels: ["bug"],
+      labels: [{ name: "bug", color: "#d73a4a", textColor: "#ffffff" }],
       comments: 3,
       milestone: "M1",
       createdAt: "2026-01-02T03:04:05Z",
@@ -52,7 +55,7 @@ test("normalizes merge request draft, pipeline, and approval metadata", () => {
     diff_refs: { base_sha: "base", head_sha: "head", start_sha: "start" },
     author: { id: 4, username: "lin", name: "Lin" },
     assignees: [],
-    labels: [],
+    labels: [{ name: "bug", color: "#abc", text_color: "#ffffff" }],
     user_notes_count: 0,
     head_pipeline: {
       id: 25,
@@ -67,6 +70,9 @@ test("normalizes merge request draft, pipeline, and approval metadata", () => {
   assert.equal(mr.kind, "merge_request");
   assert.equal(mr.status, "draft");
   assert.equal(mr.sourceBranch, "feature");
+  assert.deepEqual(mr.labels, [
+    { name: "bug", color: "#abc", textColor: "#ffffff" },
+  ]);
   assert.deepEqual(mr.diffRefs, {
     baseSha: "base",
     headSha: "head",
@@ -99,10 +105,12 @@ test("normalizes discussion threads including inline diff positions", () => {
         resolvable: true,
         resolved: false,
         individualNote: false,
+        system: false,
         notes: [
           {
             id: 20,
             body: "Please adjust this line",
+            system: false,
             author: { id: 7, username: "reviewer", name: "Reviewer" },
             created_at: "2026-02-01T10:00:00Z",
             position: {
@@ -121,10 +129,12 @@ test("normalizes discussion threads including inline diff positions", () => {
         resolvable: true,
         resolved: false,
         individualNote: false,
+        system: false,
         notes: [
           {
             id: 20,
             body: "Please adjust this line",
+            system: false,
             author: { id: 7, username: "reviewer", name: "Reviewer" },
             createdAt: "2026-02-01T10:00:00Z",
             position: {
@@ -161,10 +171,12 @@ test("derives discussion resolution state from resolvable notes", () => {
         resolvable: true,
         resolved: true,
         individualNote: false,
+        system: false,
         notes: [
           {
             id: 1,
             body: "Resolved",
+            system: false,
             author: null,
             createdAt: "",
             position: null,
@@ -172,6 +184,7 @@ test("derives discussion resolution state from resolvable notes", () => {
           {
             id: 2,
             body: "Reply",
+            system: false,
             author: null,
             createdAt: "",
             position: null,
@@ -183,10 +196,12 @@ test("derives discussion resolution state from resolvable notes", () => {
         resolvable: true,
         resolved: false,
         individualNote: false,
+        system: false,
         notes: [
           {
             id: 3,
             body: "Open",
+            system: false,
             author: null,
             createdAt: "",
             position: null,
@@ -195,6 +210,47 @@ test("derives discussion resolution state from resolvable notes", () => {
       },
     ],
   );
+});
+
+test("normalizes label objects and label detail aliases", () => {
+  const issue = normalizeIssue({
+    labels: [
+      "plain",
+      { name: "already detailed", color: "#123456", text_color: "#abcdef" },
+    ],
+    labelDetails: [{ name: "plain", color: "#fff", textColor: "#1f2328" }],
+  });
+  assert.deepEqual(issue.labels, [
+    { name: "plain", color: "#fff", textColor: "#1f2328" },
+    {
+      name: "already detailed",
+      color: "#123456",
+      textColor: "#abcdef",
+    },
+  ]);
+});
+
+test("marks a discussion as system-only only when every note is a system note", () => {
+  const [systemThread, mixedThread, emptyThread] = normalizeDiscussions([
+    {
+      id: "system",
+      notes: [{ id: 1, body: "assigned to", system: true }],
+    },
+    {
+      id: "mixed",
+      notes: [
+        { id: 2, body: "system event", system: true },
+        { id: 3, body: "user reply", system: false },
+      ],
+    },
+    { id: "empty", notes: [] },
+  ]);
+
+  assert.equal(systemThread.system, true);
+  assert.equal(systemThread.notes[0].system, true);
+  assert.equal(mixedThread.system, false);
+  assert.equal(mixedThread.notes[1].system, false);
+  assert.equal(emptyThread.system, false);
 });
 
 test("normalizes diff metadata without dropping patch text", () => {

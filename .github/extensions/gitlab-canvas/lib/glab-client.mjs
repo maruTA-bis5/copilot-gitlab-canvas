@@ -248,6 +248,7 @@ export class GlabClient {
         author_username: filters.author,
         page: filters.page ?? 1,
         per_page: 50,
+        with_labels_details: true,
         order_by: "updated_at",
         sort: "desc",
       },
@@ -264,6 +265,7 @@ export class GlabClient {
         author_username: filters.author,
         page: filters.page ?? 1,
         per_page: 50,
+        with_labels_details: true,
         order_by: "updated_at",
         sort: "desc",
       },
@@ -271,11 +273,25 @@ export class GlabClient {
   }
 
   getIssue(iid) {
-    return this.api("GET", this.projectEndpoint(`issues/${Number(iid)}`));
+    return this.api(
+      "GET",
+      this.projectEndpoint(`issues/${Number(iid)}`),
+      { query: { with_labels_details: true } },
+    );
   }
 
   getMergeRequest(iid) {
-    return this.api("GET", this.projectEndpoint(`merge_requests/${Number(iid)}`));
+    return this.api(
+      "GET",
+      this.projectEndpoint(`merge_requests/${Number(iid)}`),
+      { query: { with_labels_details: true } },
+    );
+  }
+
+  getProjectLabels() {
+    return this.api("GET", this.projectEndpoint("labels"), {
+      query: { per_page: 100, page: 1 },
+    });
   }
 
   getDiscussions(kind, iid) {
@@ -419,7 +435,14 @@ export class GlabClient {
   async updateLabels(kind, iid, { add = [], remove = [] } = {}) {
     const current =
       kind === "issues" ? await this.getIssue(iid) : await this.getMergeRequest(iid);
-    const labels = new Set(Array.isArray(current.labels) ? current.labels : []);
+    const labels = new Set(
+      (Array.isArray(current.labels) ? current.labels : [])
+        .map((label) =>
+          typeof label === "string" ? label : label?.name,
+        )
+        .filter((name) => typeof name === "string" && name.trim())
+        .map((name) => name.trim()),
+    );
     for (const label of remove) {
       labels.delete(String(label));
     }

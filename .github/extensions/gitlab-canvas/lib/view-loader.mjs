@@ -15,14 +15,80 @@ async function optionalResult(warnings, label, request, fallback) {
   }
 }
 
+function labelDetailsFor(item) {
+  const details = item?.label_details ?? item?.labelDetails;
+  if (Array.isArray(details)) {
+    return details;
+  }
+  if (details && typeof details === "object") {
+    return Object.entries(details).map(([name, value]) => ({
+      ...(value && typeof value === "object" ? value : { color: value }),
+      name,
+    }));
+  }
+  return [];
+}
+
+function needsProjectLabelDetails(item) {
+  const labels = Array.isArray(item?.labels) ? item.labels : [];
+  const detailsByName = new Map(
+    labelDetailsFor(item)
+      .filter((entry) => entry && typeof entry === "object" && entry.name != null)
+      .map((entry) => [String(entry.name), entry]),
+  );
+  return labels.some((label) => {
+    const name = typeof label === "string" ? label : String(label?.name ?? "");
+    const color = label && typeof label === "object" ? label.color : "";
+    return Boolean(name && !color && !detailsByName.get(name)?.color);
+  });
+}
+
+async function addProjectLabelDetails(client, items, warnings) {
+  if (
+    typeof client.getProjectLabels !== "function" ||
+    !items.some(needsProjectLabelDetails)
+  ) {
+    return items;
+  }
+
+  const definitions = await optionalResult(
+    warnings,
+    "Project label definitions",
+    () => client.getProjectLabels(),
+    [],
+  );
+  if (!Array.isArray(definitions) || !definitions.length) {
+    return items;
+  }
+
+  return items.map((item) =>
+    needsProjectLabelDetails(item)
+      ? {
+          ...item,
+          label_details: [...definitions, ...labelDetailsFor(item)],
+        }
+      : item,
+  );
+}
+
 export async function loadViewData(client, state) {
   if (state.view === "issue_list") {
     const items = await client.listIssues(state.filters);
-    return { data: { items: items.map(normalizeIssue) }, warnings: [] };
+    const warnings = [];
+    const itemsWithLabels = await addProjectLabelDetails(client, items, warnings);
+    return {
+      data: { items: itemsWithLabels.map(normalizeIssue) },
+      warnings,
+    };
   }
   if (state.view === "mr_list") {
     const items = await client.listMergeRequests(state.filters);
-    return { data: { items: items.map(normalizeMergeRequest) }, warnings: [] };
+    const warnings = [];
+    const itemsWithLabels = await addProjectLabelDetails(client, items, warnings);
+    return {
+      data: { items: itemsWithLabels.map(normalizeMergeRequest) },
+      warnings,
+    };
   }
   if (!Number.isInteger(Number(state.iid)) || Number(state.iid) < 1) {
     throw Object.assign(
@@ -55,9 +121,14 @@ export async function loadViewData(client, state) {
           [],
         ),
       ]);
+    const [issueWithLabels] = await addProjectLabelDetails(
+      client,
+      [issue],
+      warnings,
+    );
     return {
       data: normalizeViewData("issue_detail", {
-        issue,
+        issue: issueWithLabels,
         discussions,
         relatedMergeRequests,
         relatedIssues,
@@ -113,9 +184,14 @@ export async function loadViewData(client, state) {
     user_has_approved:
       approvals?.user_has_approved ?? mergeRequest.user_has_approved,
   };
+  const [mergeRequestWithLabels] = await addProjectLabelDetails(
+    client,
+    [mergeRequestWithDetails],
+    warnings,
+  );
   return {
     data: normalizeViewData("mr_detail", {
-      mergeRequest: mergeRequestWithDetails,
+      mergeRequest: mergeRequestWithLabels,
       discussions: normalizeDiscussions(discussions),
       diffs: normalizeMergeRequestDiffs(changes),
       relatedIssues,

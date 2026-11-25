@@ -14,6 +14,7 @@ const assets = new Map([
   ["/markdown.js", ["markdown.js", "text/javascript; charset=utf-8"]],
   ["/diff-viewer.js", ["diff-viewer.js", "text/javascript; charset=utf-8"]],
   ["/views/common.js", ["views/common.js", "text/javascript; charset=utf-8"]],
+  ["/views/header.js", ["views/header.js", "text/javascript; charset=utf-8"]],
   ["/views/list-view.js", ["views/list-view.js", "text/javascript; charset=utf-8"]],
   ["/views/issue-detail.js", ["views/issue-detail.js", "text/javascript; charset=utf-8"]],
   ["/views/mr-detail.js", ["views/mr-detail.js", "text/javascript; charset=utf-8"]],

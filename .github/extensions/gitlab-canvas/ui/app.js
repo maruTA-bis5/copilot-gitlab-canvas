@@ -1,6 +1,6 @@
 import { renderMarkdown } from "./markdown.js";
 import { createDiffCommentPosition } from "./diff-viewer.js";
-import { backendLabel } from "./views/common.js";
+import { renderHeader } from "./views/header.js";
 import { renderIssueDetail } from "./views/issue-detail.js";
 import { renderListView } from "./views/list-view.js";
 import { renderMergeRequestDetail } from "./views/mr-detail.js";
@@ -29,32 +29,6 @@ function message(key, fallback) {
   return state?.messages?.[key] || fallback || key;
 }
 
-function renderHeader() {
-  const isIssues = state.view.startsWith("issue");
-  const projectPath = state.project?.project || state.project?.path || "";
-  const lang = state.languagePreference || "auto";
-  const mode = backendLabel(state.mode);
-  return `<header class="app-header">
-    <div class="brand"><span class="brand-mark" aria-hidden="true">G</span><span class="project-path">${escapeHtml(projectPath)}</span></div>
-    <nav class="header-nav" aria-label="GitLab sections">
-      <button type="button" class="${isIssues ? "active" : ""}" data-nav="issue_list">${escapeHtml(message("issues", "Issues"))}</button>
-      <button type="button" class="${!isIssues ? "active" : ""}" data-nav="mr_list">${escapeHtml(message("mergeRequests", "Merge requests"))}</button>
-    </nav>
-    <div class="header-actions">
-      <span class="mode-indicator" title="${escapeHtml(message("backend", "Backend"))}">${escapeHtml(mode)}</span>
-      <button type="button" class="secondary-button" data-command="refresh">${escapeHtml(message("refresh", "Refresh"))}</button>
-      <a class="secondary-button" href="${escapeHtml(state.project?.projectUrl || "#")}" target="_blank" rel="noopener noreferrer">${escapeHtml(message("openInGitLab", "Open in GitLab"))}</a>
-      <label class="language-select">${escapeHtml(message("language", "Language"))}
-        <select data-language>
-          <option value="auto"${lang === "auto" ? " selected" : ""}>Auto</option>
-          <option value="ja"${lang === "ja" ? " selected" : ""}>日本語</option>
-          <option value="en"${lang === "en" ? " selected" : ""}>English</option>
-        </select>
-      </label>
-    </div>
-  </header>`;
-}
-
 function renderBody() {
   if (state.view === "issue_list" || state.view === "mr_list") {
     return renderListView(state);
@@ -79,7 +53,7 @@ function render() {
   }
   window.gitlabCanvasState = state;
   app.innerHTML = `<div class="app-shell">
-    ${renderHeader()}
+    ${renderHeader(state)}
     <main class="canvas-content">
       ${state.error ? `<div class="error-banner" role="alert">${escapeHtml(state.error)}</div>` : ""}
       ${state.pending ? `<div class="info-banner" role="status">${escapeHtml(message("mcpPending", "Waiting for GitLab MCP data from the agent."))}</div>` : ""}
