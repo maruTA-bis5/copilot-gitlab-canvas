@@ -44,19 +44,25 @@ function closeCopilotMenus({ restoreFocus = false } = {}) {
   }
 }
 
-function toggleCopilotMenu(toggle) {
+function openCopilotMenu(toggle, { focusLast = false } = {}) {
   const dropdown = toggle.closest("[data-copilot-menu]");
   const menu = dropdown?.querySelector('[role="menu"]');
-  if (!menu) {
+  const items = menu?.querySelectorAll('[role="menuitem"]');
+  if (!menu || !items?.length) {
     return;
   }
-  const shouldOpen = toggle.getAttribute("aria-expanded") !== "true";
   closeCopilotMenus();
-  if (shouldOpen) {
-    toggle.setAttribute("aria-expanded", "true");
-    menu.hidden = false;
-    menu.querySelector('[role="menuitem"]')?.focus();
+  toggle.setAttribute("aria-expanded", "true");
+  menu.hidden = false;
+  items[focusLast ? items.length - 1 : 0]?.focus();
+}
+
+function toggleCopilotMenu(toggle) {
+  if (toggle.getAttribute("aria-expanded") === "true") {
+    closeCopilotMenus();
+    return;
   }
+  openCopilotMenu(toggle);
 }
 
 function renderBody() {
@@ -289,9 +295,6 @@ app.addEventListener("click", (event) => {
     toggleCopilotMenu(menuToggle);
     return;
   }
-  if (!event.target.closest("[data-copilot-menu]")) {
-    closeCopilotMenus();
-  }
 
   const reference = event.target.closest("[data-reference-kind][data-iid]");
   if (reference) {
@@ -380,6 +383,18 @@ app.addEventListener("click", (event) => {
   }
 });
 
+app.addEventListener("focusout", (event) => {
+  const dropdown = event.target.closest("[data-copilot-menu]");
+  if (!dropdown || (event.relatedTarget && dropdown.contains(event.relatedTarget))) {
+    return;
+  }
+  queueMicrotask(() => {
+    if (dropdown.isConnected && !dropdown.contains(document.activeElement)) {
+      closeCopilotMenus();
+    }
+  });
+});
+
 document.addEventListener("click", (event) => {
   if (!event.target.closest?.("[data-copilot-menu]")) {
     closeCopilotMenus();
@@ -387,6 +402,16 @@ document.addEventListener("click", (event) => {
 });
 
 document.addEventListener("keydown", (event) => {
+  const menuToggle = event.target.closest?.("[data-copilot-menu-toggle]");
+  if (
+    menuToggle &&
+    (event.key === "ArrowDown" || event.key === "ArrowUp")
+  ) {
+    event.preventDefault();
+    openCopilotMenu(menuToggle, { focusLast: event.key === "ArrowUp" });
+    return;
+  }
+
   const menuItem = event.target.closest?.(
     '[data-copilot-menu] [role="menuitem"]',
   );
@@ -411,9 +436,6 @@ document.addEventListener("keydown", (event) => {
       event.preventDefault();
       items[nextIndex]?.focus();
       return;
-    }
-    if (event.key === "Tab") {
-      closeCopilotMenus();
     }
   }
 

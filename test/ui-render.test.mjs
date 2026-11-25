@@ -221,7 +221,7 @@ test("groups Copilot prompts in an accessible dropdown", () => {
   assert.match(mrHtml, /data-intent="fix"[^>]*>Address review feedback<\/button>/);
   assert.match(
     stylesheet,
-    /\.copilot-menu-panel\s*\{[^}]*width:\s*min\(15rem,\s*calc\(100vw - 24px\)\);[^}]*background:\s*var\(--canvas-bg\);[^}]*color:\s*var\(--canvas-text\);/,
+    /\.copilot-menu-panel\s*\{[^}]*z-index:\s*2;[^}]*width:\s*min\(15rem,\s*calc\(100vw - 36px\)\);[^}]*background:\s*var\(--canvas-bg\);[^}]*color:\s*var\(--canvas-text\);/,
   );
 });
 
@@ -258,7 +258,13 @@ test("shows only the valid approval action for the current MR state", () => {
     commands(render("opened", { userApproved: false, userCanApprove: false })),
     [],
   );
-  assert.deepEqual(commands(render("merged", { userApproved: false })), []);
+  assert.deepEqual(
+    commands(render("opened", { userApproved: true, userCanApprove: false })),
+    ["unapprove"],
+  );
+  const merged = render("merged", { userApproved: false });
+  assert.deepEqual(commands(merged), []);
+  assert.doesNotMatch(merged, /class="gitlab-actions"/);
   assert.deepEqual(commands(render("closed", { userApproved: true })), []);
 });
 

@@ -116,6 +116,14 @@ test("preserves approval eligibility from GitLab and normalized payloads", () =>
   assert.equal(normalized.approvals.userApproved, true);
   assert.equal(normalized.approvals.userCanApprove, false);
 
+  const camelCase = normalizeMergeRequest({
+    state: "opened",
+    userApproved: true,
+    userCanApprove: false,
+  });
+  assert.equal(camelCase.approvals.userApproved, true);
+  assert.equal(camelCase.approvals.userCanApprove, false);
+
   const unknown = normalizeMergeRequest({
     state: "opened",
     approvals: { userCanApprove: null },

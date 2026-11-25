@@ -608,10 +608,10 @@ time {
 
 .copilot-menu-panel {
   position: absolute;
-  z-index: 4;
+  z-index: 2;
   top: calc(100% + 6px);
   right: 0;
-  width: min(15rem, calc(100vw - 24px));
+  width: min(15rem, calc(100vw - 36px));
   padding: 4px;
   border: 1px solid var(--canvas-border);
   border-radius: 8px;
