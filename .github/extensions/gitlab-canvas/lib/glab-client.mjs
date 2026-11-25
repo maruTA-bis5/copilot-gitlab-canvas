@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { win32 as win32Path } from "node:path";
 
 export class GlabError extends Error {
   constructor(message, { code = "glab_error", exitCode = null, cause } = {}) {
@@ -29,24 +30,78 @@ function queryString(query) {
   return encoded ? `?${encoded}` : "";
 }
 
-function flattenFields(value, prefix = "") {
-  const fields = [];
-  for (const [key, entry] of Object.entries(value ?? {})) {
-    const field = prefix ? `${prefix}[${key}]` : key;
-    if (entry == null) {
+function withoutNullFields(value) {
+  if (Array.isArray(value)) {
+    return value.map(withoutNullFields);
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([, entry]) => entry != null)
+        .map(([key, entry]) => [key, withoutNullFields(entry)]),
+    );
+  }
+  return value;
+}
+
+function fieldArguments(fields) {
+  const args = [];
+  for (const [key, value] of Object.entries(fields ?? {})) {
+    if (value == null) {
       continue;
     }
-    if (Array.isArray(entry)) {
-      for (const item of entry) {
-        fields.push([`${field}[]`, String(item)]);
-      }
-    } else if (typeof entry === "object") {
-      fields.push(...flattenFields(entry, field));
+    if (typeof value === "object") {
+      args.push("--field", `${key}=${JSON.stringify(withoutNullFields(value))}`);
     } else {
-      fields.push([field, String(entry)]);
+      args.push("--raw-field", `${key}=${String(value)}`);
     }
   }
-  return fields;
+  return args;
+}
+
+function fallbackExecutables(environment, platform) {
+  const candidates = [environment.GLAB_PATH, environment.GLAB_BIN];
+  if (platform === "win32") {
+    if (environment.LOCALAPPDATA) {
+      candidates.push(
+        win32Path.join(
+          environment.LOCALAPPDATA,
+          "Programs",
+          "glab",
+          "glab.exe",
+        ),
+      );
+    }
+    if (environment.USERPROFILE) {
+      candidates.push(
+        win32Path.join(
+          environment.USERPROFILE,
+          "AppData",
+          "Local",
+          "Programs",
+          "glab",
+          "glab.exe",
+        ),
+      );
+    }
+  }
+  return [
+    ...new Set(
+      candidates
+        .filter((candidate) => typeof candidate === "string" && candidate.trim())
+        .map((candidate) => candidate.trim()),
+    ),
+  ];
+}
+
+function commandError(error) {
+  const output = sanitizeOutput(error?.stderr);
+  const detail = output ? `: ${output}` : "";
+  return new GlabError(`glab command failed${detail}`, {
+    code: error?.code === "ENOENT" ? "glab_not_installed" : "glab_command_failed",
+    exitCode: Number.isInteger(error?.code) ? error.code : null,
+    cause: error,
+  });
 }
 
 export class GlabClient {
@@ -56,6 +111,8 @@ export class GlabClient {
     baseUrl = `https://${host}`,
     cwd = process.cwd(),
     execFileImpl = execFile,
+    env = process.env,
+    platform = process.platform,
     timeout = 20_000,
     maxBuffer = 20 * 1024 * 1024,
   }) {
@@ -68,8 +125,25 @@ export class GlabClient {
     this.baseUrl = new URL(baseUrl).origin;
     this.cwd = cwd;
     this.execFileImpl = execFileImpl;
+    this.executable = "glab";
+    this.fallbackExecutables = fallbackExecutables(env, platform);
     this.timeout = timeout;
     this.maxBuffer = maxBuffer;
+  }
+
+  runExecutable(executable, args, options) {
+    return new Promise((resolve, reject) => {
+      this.execFileImpl(executable, args, options, (error, stdout, stderr) => {
+        if (error) {
+          const failure = new Error(error.message, { cause: error });
+          failure.code = error.code;
+          failure.stderr = stderr;
+          reject(failure);
+          return;
+        }
+        resolve(stdout);
+      });
+    });
   }
 
   async run(args, { binary = false } = {}) {
@@ -81,22 +155,26 @@ export class GlabClient {
       timeout: this.timeout,
       windowsHide: true,
     };
-    return new Promise((resolve, reject) => {
-      this.execFileImpl("glab", args, options, (error, stdout, stderr) => {
-        if (error) {
-          const output = sanitizeOutput(stderr);
-          const detail = output ? `: ${output}` : "";
-          reject(
-            new GlabError(`glab command failed${detail}`, {
-              code: error.code === "ENOENT" ? "glab_not_installed" : "glab_command_failed",
-              exitCode: Number.isInteger(error.code) ? error.code : null,
-              cause: error,
-            }),
-          );
-          return;
+    const executables = [
+      this.executable,
+      ...this.fallbackExecutables.filter(
+        (executable) => executable !== this.executable,
+      ),
+    ];
+    for (const [index, executable] of executables.entries()) {
+      try {
+        const output = await this.runExecutable(executable, args, options);
+        this.executable = executable;
+        return output;
+      } catch (error) {
+        if (error.code === "ENOENT" && index < executables.length - 1) {
+          continue;
         }
-        resolve(stdout);
-      });
+        throw commandError(error);
+      }
+    }
+    throw new GlabError("glab command could not be resolved.", {
+      code: "glab_not_installed",
     });
   }
 
@@ -133,9 +211,7 @@ export class GlabClient {
       method.toUpperCase(),
       target,
     ];
-    for (const [key, value] of flattenFields(fields)) {
-      args.push("--raw-field", `${key}=${value}`);
-    }
+    args.push(...fieldArguments(fields));
 
     const output = await this.run(args, { binary });
     if (binary) {
@@ -217,11 +293,31 @@ export class GlabClient {
     );
   }
 
-  getRelatedIssues(iid) {
-    return this.api(
+  async getRelatedIssues(iid) {
+    const currentIid = Number(iid);
+    const links = await this.api(
       "GET",
-      this.projectEndpoint(`issues/${Number(iid)}/related_issues`),
+      this.projectEndpoint(`issues/${currentIid}/links`),
     );
+    if (!Array.isArray(links)) {
+      return [];
+    }
+    return links
+      .map((link) => {
+        const source = link.source_issue;
+        const target = link.target_issue;
+        if (!source && !target) {
+          return link;
+        }
+        if (Number(source?.iid) === currentIid) {
+          return target;
+        }
+        if (Number(target?.iid) === currentIid) {
+          return source;
+        }
+        return target ?? source;
+      })
+      .filter(Boolean);
   }
 
   getRelatedMergeRequests(issueIid) {
@@ -316,7 +412,7 @@ export class GlabClient {
     return this.api(
       "PUT",
       this.projectEndpoint(`${resource}/${Number(iid)}`),
-      { fields: { "assignee_ids[]": assigneeId } },
+      { fields: { assignee_ids: [assigneeId] } },
     );
   }
 

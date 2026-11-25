@@ -25,7 +25,9 @@ and authenticated.
 The extension is discovered from
 `.github/extensions/gitlab-canvas/extension.mjs`. For direct API access, install
 `glab` and authenticate it for the target host. The extension never reads or
-stores GitLab credentials itself.
+stores GitLab credentials itself. If `glab` is not on `PATH`, it checks
+`GLAB_PATH`, `GLAB_BIN`, and the standard per-user Windows install location
+(`%LOCALAPPDATA%\Programs\glab\glab.exe`).
 
 Open the canvas for the current GitLab project with the `gitlab` canvas ID, or
 pass a project URL explicitly:
