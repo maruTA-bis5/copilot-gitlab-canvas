@@ -101,7 +101,6 @@ export function renderMergeRequestDetail(state) {
         <div class="detail-subtitle"><span class="status-badge status-${escapeHtml(mergeRequest.status)}">${escapeHtml(statusLabel)}</span> · ${escapeHtml(mergeRequest.author?.name || mergeRequest.author?.username || "")} · ${escapeHtml(mergeRequest.createdAt)}</div>
         <div class="branch-line"><code>${escapeHtml(mergeRequest.sourceBranch)}</code><span>→</span><code>${escapeHtml(mergeRequest.targetBranch)}</code></div>
       </div>
-      <a class="secondary-button" href="${escapeHtml(safeExternalUrl(mergeRequest.webUrl))}" target="_blank" rel="noopener noreferrer">${escapeHtml(t.openInGitLab || "Open in GitLab")}</a>
     </div>
     <div class="detail-actions">
       ${

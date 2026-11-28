@@ -5,7 +5,6 @@ import {
   renderDiscussionList,
   renderMetadataForm,
   renderRelatedItems,
-  safeExternalUrl,
 } from "./common.js";
 
 export function renderIssueDetail(state) {
@@ -30,7 +29,6 @@ export function renderIssueDetail(state) {
         <h1>${escapeHtml(issue.title)}</h1>
         <div class="detail-subtitle">${escapeHtml(issue.state)} · ${escapeHtml(issue.author?.name || issue.author?.username || "")} · ${escapeHtml(issue.createdAt)}</div>
       </div>
-      <a class="secondary-button" href="${escapeHtml(safeExternalUrl(issue.webUrl))}" target="_blank" rel="noopener noreferrer">${escapeHtml(t.openInGitLab || "Open in GitLab")}</a>
     </div>
     <div class="detail-actions">
       <div class="gitlab-actions" role="group" aria-label="${escapeHtml(t.gitlabActions || "GitLab actions")}">

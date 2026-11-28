@@ -38,10 +38,11 @@ export function renderHeader(state = {}) {
       : message("mergeRequests", "Merge requests");
   }
   const tooltip = [title, projectPath].filter(Boolean).join(" — ");
-  const projectUrl = safeExternalUrl(state.project?.projectUrl);
+  const itemUrl = item?.webUrl ? safeExternalUrl(item.webUrl) : "";
+  const openUrl = itemUrl || safeExternalUrl(state.project?.projectUrl);
   const openLink =
-    projectUrl && projectUrl !== "#"
-      ? `<a class="secondary-button" href="${escapeHtml(projectUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(message("openInGitLab", "Open in GitLab"))}</a>`
+    openUrl && openUrl !== "#"
+      ? `<a class="secondary-button" href="${escapeHtml(openUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(message("openInGitLab", "Open in GitLab"))}</a>`
       : "";
 
   return `<header class="app-header">

@@ -85,9 +85,118 @@ test("restricts item links to HTTP(S) and escapes detail content", () => {
   });
 
   assert.doesNotMatch(html, /href="javascript:/i);
-  assert.match(html, /href="#"/);
+  assert.doesNotMatch(html, /href="#"/);
+  assert.doesNotMatch(html, />Open in GitLab<\/a>/);
   assert.doesNotMatch(html, /<script>/i);
   assert.match(html, /&lt;script&gt;/i);
+});
+
+test("renders a single Open in GitLab button for the displayed detail item", () => {
+  const project = {
+    path: "team/repo",
+    projectUrl: "https://gitlab.test/team/repo",
+  };
+  const issue = {
+    iid: 3,
+    title: "Issue",
+    state: "opened",
+    webUrl: "https://gitlab.test/team/repo/-/issues/3",
+    author: { name: "Reporter" },
+    createdAt: "",
+    description: "",
+    assignees: [],
+    labels: [],
+  };
+  const issueState = {
+    view: "issue_detail",
+    iid: 3,
+    mode: "mcp",
+    project,
+    messages,
+    data: {
+      issue,
+      discussions: [],
+      relatedMergeRequests: [],
+      relatedIssues: [],
+    },
+  };
+  const issueHtml = `${renderHeader(issueState)}${renderIssueDetail(issueState)}`;
+  assert.equal(issueHtml.match(/>Open in GitLab<\/a>/g)?.length, 1);
+  assert.match(
+    issueHtml,
+    /href="https:\/\/gitlab\.test\/team\/repo\/-\/issues\/3"[^>]*>Open in GitLab<\/a>/,
+  );
+  assert.doesNotMatch(renderIssueDetail(issueState), />Open in GitLab<\/a>/);
+
+  const mergeRequest = {
+    iid: 8,
+    title: "MR",
+    state: "opened",
+    status: "opened",
+    webUrl: "https://gitlab.test/team/repo/-/merge_requests/8",
+    author: { name: "Reviewer" },
+    createdAt: "",
+    sourceBranch: "feature",
+    targetBranch: "main",
+    description: "",
+    approvals: { required: 1, approved: 0 },
+    pipeline: null,
+    assignees: [],
+    labels: [],
+  };
+  const mrState = {
+    view: "mr_detail",
+    iid: 8,
+    mode: "mcp",
+    project,
+    messages,
+    data: {
+      mergeRequest,
+      discussions: [],
+      diffs: [],
+      relatedIssues: [],
+    },
+  };
+  const mrHtml = `${renderHeader(mrState)}${renderMergeRequestDetail(mrState)}`;
+  assert.equal(mrHtml.match(/>Open in GitLab<\/a>/g)?.length, 1);
+  assert.match(
+    mrHtml,
+    /href="https:\/\/gitlab\.test\/team\/repo\/-\/merge_requests\/8"[^>]*>Open in GitLab<\/a>/,
+  );
+  assert.doesNotMatch(renderMergeRequestDetail(mrState), />Open in GitLab<\/a>/);
+});
+
+test("hides the header link when a loaded item URL is unsafe", () => {
+  const html = renderHeader({
+    view: "issue_detail",
+    iid: 3,
+    project: {
+      path: "team/repo",
+      projectUrl: "https://gitlab.test/team/repo",
+    },
+    data: { issue: { iid: 3, title: "Issue", webUrl: "javascript:alert(1)" } },
+    messages,
+  });
+
+  assert.doesNotMatch(html, /Open in GitLab/);
+  assert.doesNotMatch(html, /href="javascript:/i);
+  assert.doesNotMatch(html, /target="_blank"/);
+});
+
+test("falls back to the project URL while detail data is loading", () => {
+  const html = renderHeader({
+    view: "mr_detail",
+    iid: 8,
+    project: {
+      path: "team/repo",
+      projectUrl: "https://gitlab.test/team/repo",
+    },
+    data: {},
+    messages,
+  });
+
+  assert.equal(html.match(/>Open in GitLab<\/a>/g)?.length, 1);
+  assert.match(html, /href="https:\/\/gitlab\.test\/team\/repo"/);
 });
 
 test("uses Close and Reopen action labels for issues and merge requests", () => {
@@ -375,6 +484,11 @@ test("uses localized list names instead of the project path in the header", () =
 
   assert.match(html, /<span class="header-title">Merge requests<\/span>/);
   assert.doesNotMatch(html, /<span class="header-title">team\/repo<\/span>/);
+  assert.equal(html.match(/>Open in GitLab<\/a>/g)?.length, 1);
+  assert.match(
+    html,
+    /href="https:\/\/gitlab\.test\/team\/repo"[^>]*>Open in GitLab<\/a>/,
+  );
 
   const unsafe = renderHeader({
     view: "issue_list",
